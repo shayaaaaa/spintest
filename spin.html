@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Spinning Wheel Game</title>
+  <style>
+    body {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      font-family: Arial, sans-serif;
+      background-color: black ;
+    }
+    .wheel-container {
+      position: relative;
+      width: 300px;
+      height: 300px;
+    }
+    .wheel {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      border: 6px solid #333;
+      position: relative;
+      transform: rotate(0deg);
+      transition: transform 6s cubic-bezier(0.25, 0.1, 0.25, 1);
+      overflow: hidden;
+    }
+    .wheel .segment {
+      position: absolute;
+      width: 50%;
+      height: 50%;
+      background: gold;
+      transform-origin: 100% 100%;
+      clip-path: polygon(0 0, 73% 0, 100% 100%);
+      border-top-left-radius: 150px;
+    }
+    .wheel .segment:nth-child(2n) {
+      background: red;
+    }
+    .wheel .segment span {
+      position: absolute;
+      top: 30%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 18px;
+      font-weight: bold;
+    }
+    .arrow {
+      position: absolute;
+      top: -20px;
+      left: 45.2%;
+      width: 0;
+      height: 0;
+      border-left: 20px solid transparent;
+      border-right: 20px solid transparent;
+      border-top: 20px solid #F0FFFF;
+    }
+    .spin-button {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      background: green ;
+      color: white;
+      font-size: 16px;
+      text-align: center;
+      line-height: 60px;
+      border-radius: 50%;
+      cursor: pointer;
+      border: none;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+  </style>
+</head>
+<body>
+
+<div class="wheel-container">
+  <div class="arrow"></div>
+  <div class="wheel" id="wheel">
+    <!-- Segments with numbers -->
+    <div class="segment" style="transform: rotate(0deg);"><span>12</span></div>
+    <div class="segment" style="transform: rotate(30deg);"><span>11</span></div>
+    <div class="segment" style="transform: rotate(60deg);"><span>10</span></div>
+    <div class="segment" style="transform: rotate(90deg);"><span>9</span></div>
+    <div class="segment" style="transform: rotate(120deg);"><span>8</span></div>
+    <div class="segment" style="transform: rotate(150deg);"><span>7</span></div>
+    <div class="segment" style="transform: rotate(180deg);"><span>6</span></div>
+    <div class="segment" style="transform: rotate(210deg);"><span>5</span></div>
+    <div class="segment" style="transform: rotate(240deg);"><span>4</span></div>
+    <div class="segment" style="transform: rotate(270deg);"><span>3</span></div>
+    <div class="segment" style="transform: rotate(300deg);"><span>2</span></div>
+    <div class="segment" style="transform: rotate(330deg);"><span>1</span></div>
+  </div>
+  <button class="spin-button" id="spinButton">Spin</button>
+</div>
+
+<script>
+  const wheel = document.getElementById('wheel');
+  const spinButton = document.getElementById('spinButton');
+  let spinning = false;
+  wheel.style.transform = `rotate(45deg)`;
+
+  spinButton.addEventListener('click', () => {
+    if (spinning) return;
+    spinning = true;
+
+    // Generate a random spin degree 
+    let randomDegrees =  Math.floor(Math.random() * 360);
+
+    // add 3 to 9 extra spin full rotations
+    randomDegrees = randomDegrees + 360 * (Math.floor(Math.random() * 6 + 3));
+
+    // Spin the wheel
+    wheel.style.transition = `transform 6s cubic-bezier(0.25, 0.1, 0.25, 1)`;
+    wheel.style.transform = `rotate(${randomDegrees}deg)`;
+    //wheel.style.transform = `rotate(${randomDegrees%360}deg)`;
+
+    // Reset spinning after the animation
+    setTimeout(() => {
+      spinning = false;
+      randomDegrees = randomDegrees -45
+      const finalDegree = randomDegrees % 360;
+      alert(finalDegree)
+      const segment = Math.floor(finalDegree / 30);
+      alert(`The wheel stopped at segment ${segment + 1}`);
+      wheel.style.transition = `transform 2s cubic-bezier(0.25, 0.1, 0.25, 1)`;
+      wheel.style.transform = `rotate(45deg)`;
+    }, 6000);
+  });
+</script>
+
+</body>
+</html>
