@@ -8,6 +8,16 @@ export function issueGatherOrder(ctx, unit, node) {
   if (!unit.canGather) return;
   unit.order = { type: 'gather', nodeId: node.id };
   unit.gatherTimer = 0;
+  travelToNodeAndHarvest(ctx, unit, node);
+}
+
+// Always routes through movement before harvesting — used both for the
+// initial order and for every repeat trip after a deposit, so a unit can
+// never start "harvesting" from wherever it happens to be standing (e.g.
+// still at the drop-off building).
+function travelToNodeAndHarvest(ctx, unit, node) {
+  // moveUnitTo sets state to 'moving' for the trip; beginHarvest (the
+  // onArrive callback) switches it to 'gathering' once the unit arrives.
   moveUnitTo(ctx, unit, node.x, node.y, (ctx2, u) => beginHarvest(ctx2, u, node));
 }
 
@@ -24,6 +34,7 @@ function beginHarvest(ctx, unit, node) {
   node.harvesterIds.add(unit.id);
   unit.state = 'gathering';
   unit.gatherTimer = HARVEST_SECONDS_PER_LOAD;
+  unit.gatherProgress = 0;
   unit.gatherNodeId = node.id;
   unit.cargoType = node.resourceType;
 }
@@ -58,9 +69,9 @@ export function updateGathering(ctx, dt) {
 
     if (unit.state === 'gathering') {
       unit.gatherTimer -= dt;
+      unit.gatherProgress = Math.min(1, 1 - unit.gatherTimer / HARVEST_SECONDS_PER_LOAD);
       if (unit.gatherTimer <= 0) {
         const node = ctx.store.get(unit.gatherNodeId);
-        const rate = unit.cargoCapacity / HARVEST_SECONDS_PER_LOAD;
         const want = unit.cargoCapacity - unit.cargoAmount;
         const available = node ? node.amount : 0;
         const take = Math.min(want, available, unit.cargoCapacity);
@@ -83,7 +94,7 @@ export function updateGathering(ctx, dt) {
         ctx.eventBus.emit('resourcesChanged', { ownerId: unit.ownerId });
         unit.cargoAmount = 0;
         const node = unit.gatherNodeId ? ctx.store.get(unit.gatherNodeId) : null;
-        if (node && node.amount > 0) beginHarvest(ctx, unit, node);
+        if (node && node.amount > 0) travelToNodeAndHarvest(ctx, unit, node);
         else { unit.state = 'idle'; unit.order = null; }
       }
     }

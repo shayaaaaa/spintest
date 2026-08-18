@@ -115,15 +115,6 @@ export function getBuildingSprite(isTownHall, color, wPx, hPx) {
   ctx.strokeStyle = 'rgba(0,0,0,0.6)';
   ctx.lineWidth = Math.max(1, Math.min(wPx, hPx) * 0.05);
   ctx.stroke();
-  if (isTownHall) {
-    ctx.beginPath();
-    ctx.moveTo(wPx / 2, hPx * 0.14);
-    ctx.lineTo(wPx * 0.7, hPx * 0.4);
-    ctx.lineTo(wPx * 0.3, hPx * 0.4);
-    ctx.closePath();
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.fill();
-  }
   cache.set(key, canvas);
   return canvas;
 }

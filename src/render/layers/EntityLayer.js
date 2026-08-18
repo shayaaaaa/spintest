@@ -100,4 +100,16 @@ function drawUnit(ctx2d, camera, gameCtx, u, ppt) {
     ctx2d.lineWidth = Math.max(1, r * 0.25);
     ctx2d.stroke();
   }
+
+  if (u.state === 'gathering') {
+    const barW = size * 0.9, barH = Math.max(3, size * 0.1);
+    const barX = p.x - barW / 2, barY = p.y - size * 0.62 - barH;
+    ctx2d.fillStyle = 'rgba(0,0,0,0.6)';
+    ctx2d.fillRect(barX, barY, barW, barH);
+    ctx2d.fillStyle = '#f2c94c';
+    ctx2d.fillRect(barX, barY, barW * (u.gatherProgress || 0), barH);
+    ctx2d.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx2d.lineWidth = 1;
+    ctx2d.strokeRect(barX, barY, barW, barH);
+  }
 }
