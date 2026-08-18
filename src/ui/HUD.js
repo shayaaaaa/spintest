@@ -6,6 +6,7 @@ export class HUD {
     this.selection = selection;
     this.materialsEl = document.getElementById('hudMaterials');
     this.energyEl = document.getElementById('hudEnergy');
+    this.lumberEl = document.getElementById('hudLumber');
     this.supplyEl = document.getElementById('hudSupply');
     this.heroBadge = document.getElementById('heroBadge');
     this.heroLevelEl = document.getElementById('heroLevel');
@@ -18,6 +19,7 @@ export class HUD {
     const flavor = player.race.resourceFlavor;
     this.materialsEl.textContent = `${Math.floor(player.resources.materials || 0)} ${flavor.materials}`;
     this.energyEl.textContent = `${Math.floor(player.resources.energy || 0)} ${flavor.energy}`;
+    this.lumberEl.textContent = `${Math.floor(player.resources.lumber || 0)} ${flavor.lumber}`;
     const { used, cap } = currentSupply(this.ctx, this.ctx.localPlayerId);
     this.supplyEl.textContent = `${used} / ${cap}`;
 

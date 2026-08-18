@@ -8,6 +8,7 @@
   --accent: #5ad2e0;
   --materials: #d9b23a;
   --energy: #4fb3e8;
+  --lumber: #a9702f;
   --danger: #e0666f;
 }
 
@@ -110,6 +111,7 @@ html, body {
 #hud .resource .dot { width: 10px; height: 10px; border-radius: 50%; }
 #hud .resource.materials .dot { background: var(--materials); }
 #hud .resource.energy .dot { background: var(--energy); }
+#hud .resource.lumber .dot { background: var(--lumber); }
 #hud .supply { margin-left: auto; pointer-events: auto; }
 #hud .hero-badge { display: none; align-items: center; gap: 6px; pointer-events: auto; }
 #hud .hero-badge.visible { display: flex; }

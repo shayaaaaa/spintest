@@ -4,7 +4,7 @@ export default {
   id: 'vharn',
   name: 'Vharn Swarm',
   color: '#8a4fb3',
-  resourceFlavor: { materials: 'Biomass', energy: 'Mutagen' },
+  resourceFlavor: { materials: 'Biomass', energy: 'Mutagen', lumber: 'Lumber' },
   startingUnitCount: 3,
   workerTypeId: 'larvaDrudge',
   townHallId: 'hiveCore',

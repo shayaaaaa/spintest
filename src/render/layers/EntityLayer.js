@@ -3,6 +3,7 @@ import { Visibility } from '../../world/FogOfWar.js';
 import { tileVisibility } from './FogLayer.js';
 
 const NEUTRAL_COLOR = '#c9c9c9';
+const CARGO_COLORS = { materials: '#d9b23a', energy: '#4fb3e8', lumber: '#8a5a2e' };
 
 function visibilityFor(entity, gameCtx) {
   if (entity.ownerId === gameCtx.localPlayerId) return Visibility.VISIBLE;
@@ -40,6 +41,9 @@ function alphaFor(entity, visibility) {
 }
 
 function drawResourceNode(ctx2d, camera, gameCtx, node, ppt) {
+  // Lumber nodes sit on top of an actual tree, already drawn by
+  // TerrainLayer.js at the same spot — no separate circle/label needed.
+  if (node.resourceType === 'lumber') return;
   const vis = visibilityFor(node, gameCtx);
   if (vis === Visibility.HIDDEN) return;
   const diameter = ppt * 1.5;
@@ -92,24 +96,12 @@ function drawUnit(ctx2d, camera, gameCtx, u, ppt) {
 
   if (u.cargoAmount > 0) {
     const cx = p.x + size * 0.34, cy = p.y - size * 0.34, r = size * 0.2;
-    ctx2d.fillStyle = u.cargoType === 'energy' ? '#4fb3e8' : '#d9b23a';
+    ctx2d.fillStyle = CARGO_COLORS[u.cargoType] || CARGO_COLORS.materials;
     ctx2d.beginPath();
     ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
     ctx2d.fill();
     ctx2d.strokeStyle = 'rgba(0,0,0,0.7)';
     ctx2d.lineWidth = Math.max(1, r * 0.25);
     ctx2d.stroke();
-  }
-
-  if (u.state === 'gathering') {
-    const barW = size * 0.9, barH = Math.max(3, size * 0.1);
-    const barX = p.x - barW / 2, barY = p.y - size * 0.62 - barH;
-    ctx2d.fillStyle = 'rgba(0,0,0,0.6)';
-    ctx2d.fillRect(barX, barY, barW, barH);
-    ctx2d.fillStyle = '#f2c94c';
-    ctx2d.fillRect(barX, barY, barW * (u.gatherProgress || 0), barH);
-    ctx2d.strokeStyle = 'rgba(0,0,0,0.7)';
-    ctx2d.lineWidth = 1;
-    ctx2d.strokeRect(barX, barY, barW, barH);
   }
 }

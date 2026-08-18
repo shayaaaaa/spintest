@@ -4,7 +4,7 @@ export default {
   id: 'thornback',
   name: 'Thornback Clans',
   color: '#5f9e4f',
-  resourceFlavor: { materials: 'Hide & Timber', energy: 'Spirit Herbs' },
+  resourceFlavor: { materials: 'Hide & Timber', energy: 'Spirit Herbs', lumber: 'Lumber' },
   startingUnitCount: 3,
   workerTypeId: 'snarehand',
   townHallId: 'campfireHearth',

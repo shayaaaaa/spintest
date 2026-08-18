@@ -34,7 +34,6 @@ function beginHarvest(ctx, unit, node) {
   node.harvesterIds.add(unit.id);
   unit.state = 'gathering';
   unit.gatherTimer = HARVEST_SECONDS_PER_LOAD;
-  unit.gatherProgress = 0;
   unit.gatherNodeId = node.id;
   unit.cargoType = node.resourceType;
 }
@@ -69,7 +68,6 @@ export function updateGathering(ctx, dt) {
 
     if (unit.state === 'gathering') {
       unit.gatherTimer -= dt;
-      unit.gatherProgress = Math.min(1, 1 - unit.gatherTimer / HARVEST_SECONDS_PER_LOAD);
       if (unit.gatherTimer <= 0) {
         const node = ctx.store.get(unit.gatherNodeId);
         const want = unit.cargoCapacity - unit.cargoAmount;

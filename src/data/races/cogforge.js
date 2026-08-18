@@ -4,7 +4,7 @@ export default {
   id: 'cogforge',
   name: 'Cogforge Concern',
   color: '#d99a3a',
-  resourceFlavor: { materials: 'Scrap', energy: 'Coal Gas' },
+  resourceFlavor: { materials: 'Scrap', energy: 'Coal Gas', lumber: 'Lumber' },
   startingUnitCount: 3,
   workerTypeId: 'wrenchHand',
   townHallId: 'foundry',

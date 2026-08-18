@@ -28,6 +28,7 @@ import { techtreesById } from '../data/techtree.js';
 import { levelsById } from '../levels/skirmish_1v1.js';
 
 export const racesById = { cogforge, thornback, vharn };
+const LUMBER_PER_TREE = 150;
 
 export class Game {
   constructor({ levelId = 'skirmish_1v1', localPlayerId = 0, participants }) {
@@ -74,6 +75,16 @@ export class Game {
 
     for (const spec of level.resourceNodes) {
       createResourceNode(this.store, spec);
+    }
+
+    // Every tree is also a harvestable lumber node, positioned at the tile
+    // center to match where the tree sprite is actually drawn — the
+    // visual is TerrainLayer.js's tree, this is just the gather mechanic.
+    for (const tree of level.trees || []) {
+      createResourceNode(this.store, {
+        resourceType: 'lumber', amount: LUMBER_PER_TREE,
+        x: tree.x + 0.5, y: tree.y + 0.5, maxHarvesters: 1,
+      });
     }
   }
 
