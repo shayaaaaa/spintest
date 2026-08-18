@@ -110,12 +110,12 @@ html, body {
 #hud .resource .dot { width: 10px; height: 10px; border-radius: 50%; }
 #hud .resource.materials .dot { background: var(--materials); }
 #hud .resource.lumber .dot { background: var(--lumber); }
-#hud .supply { margin-left: auto; pointer-events: auto; }
+#hud .resource.population .icon { font-size: 13px; line-height: 1; }
 #hud .hero-badge { display: none; align-items: center; gap: 6px; pointer-events: auto; }
 #hud .hero-badge.visible { display: flex; }
 #hud .hero-xp-bar { width: 60px; height: 5px; background: rgba(255,255,255,0.15); border-radius: 3px; overflow: hidden; }
 #hud .hero-xp-fill { height: 100%; background: var(--accent); }
-#hud .menu-btn { pointer-events: auto; background: rgba(255,255,255,0.1); border: none; color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 16px; }
+#hud .menu-btn { margin-left: auto; pointer-events: auto; background: rgba(255,255,255,0.1); border: none; color: var(--text); border-radius: 8px; padding: 6px 10px; font-size: 16px; }
 
 /* Action bar */
 #actionBar {

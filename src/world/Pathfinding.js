@@ -122,18 +122,26 @@ function smooth(path) {
   return out;
 }
 
-function nearestWalkableNeighbor(grid, tx, ty, fromX, fromY) {
-  let best = null, bestDist = Infinity;
-  for (let dy = -1; dy <= 1; dy++) {
-    for (let dx = -1; dx <= 1; dx++) {
-      if (dx === 0 && dy === 0) continue;
-      const nx = tx + dx, ny = ty + dy;
-      if (!grid.isWalkable(nx, ny)) continue;
-      const d = (nx - fromX) ** 2 + (ny - fromY) ** 2;
-      if (d < bestDist) { bestDist = d; best = { tx: nx, ty: ny }; }
+// Scans progressively wider rings around the (blocked) target tile until a
+// walkable one turns up, returning the closest match at the smallest ring
+// that has one. A fixed 1-tile ring isn't enough for anything with a
+// footprint bigger than 1x1 — e.g. a 3x3 building's immediate ring is
+// entirely its own footprint — so this expands outward instead of giving up.
+function nearestWalkableNeighbor(grid, tx, ty, fromX, fromY, maxRadius = 6) {
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    let best = null, bestDist = Infinity;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue; // only this ring's new tiles
+        const nx = tx + dx, ny = ty + dy;
+        if (!grid.isWalkable(nx, ny)) continue;
+        const d = (nx - fromX) ** 2 + (ny - fromY) ** 2;
+        if (d < bestDist) { bestDist = d; best = { tx: nx, ty: ny }; }
+      }
     }
+    if (best) return best;
   }
-  return best;
+  return null;
 }
 
 // Queue that drains a limited number of path requests per sim tick.
