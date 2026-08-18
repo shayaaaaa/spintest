@@ -3,7 +3,7 @@ import { Visibility } from '../../world/FogOfWar.js';
 import { tileVisibility } from './FogLayer.js';
 
 const NEUTRAL_COLOR = '#c9c9c9';
-const CARGO_COLORS = { materials: '#d9b23a', energy: '#4fb3e8', lumber: '#8a5a2e' };
+const CARGO_COLORS = { materials: '#d9b23a', lumber: '#8a5a2e' };
 
 function visibilityFor(entity, gameCtx) {
   if (entity.ownerId === gameCtx.localPlayerId) return Visibility.VISIBLE;

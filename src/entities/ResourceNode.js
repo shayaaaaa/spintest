@@ -2,14 +2,14 @@ import { Transform } from './components.js';
 
 // Display names for map-placed (neutral) resource nodes — not race-specific,
 // since the node itself isn't owned by any player.
-const RESOURCE_NODE_NAMES = { materials: 'Gold Mine', energy: 'Energy Node', lumber: 'Tree' };
+const RESOURCE_NODE_NAMES = { materials: 'Gold Mine', lumber: 'Tree' };
 
 // Finite harvestable node with a max concurrent-harvester slot count —
 // prevents workers stacking on one node and creates expansion pressure.
 export function createResourceNode(store, { resourceType, amount, x, y, maxHarvesters = 3 }) {
   const entity = {
     kind: 'resourceNode',
-    resourceType, // 'materials' | 'energy' | 'lumber'
+    resourceType, // 'materials' | 'lumber'
     name: RESOURCE_NODE_NAMES[resourceType] || 'Resource',
     amount,
     maxAmount: amount,

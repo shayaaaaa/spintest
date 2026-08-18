@@ -42,7 +42,7 @@ export class Minimap {
       }
       const px = (e.x / mapW) * w, py = (e.y / mapH) * h;
       ctx2d.fillStyle = e.kind === 'resourceNode'
-        ? (e.resourceType === 'energy' ? '#4fb3e8' : '#d9b23a')
+        ? (e.resourceType === 'lumber' ? '#5f9e4f' : '#d9b23a')
         : (this.ctx.players[e.ownerId]?.race.color || '#999');
       ctx2d.fillRect(px - 1.5, py - 1.5, 3, 3);
     }

@@ -9,7 +9,6 @@ function mirrorNodes(x, y) {
   return [
     { resourceType: 'materials', amount: 900, x, y, maxHarvesters: 3 },
     { resourceType: 'materials', amount: 900, x: x + 2, y: y + 1, maxHarvesters: 3 },
-    { resourceType: 'energy', amount: 500, x: x + 1, y: y - 2, maxHarvesters: 2 },
   ];
 }
 

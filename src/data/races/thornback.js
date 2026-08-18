@@ -4,7 +4,7 @@ export default {
   id: 'thornback',
   name: 'Thornback Clans',
   color: '#5f9e4f',
-  resourceFlavor: { materials: 'Hide & Timber', energy: 'Spirit Herbs', lumber: 'Lumber' },
+  resourceFlavor: { materials: 'Hide & Timber', lumber: 'Lumber' },
   startingUnitCount: 3,
   workerTypeId: 'snarehand',
   townHallId: 'campfireHearth',
@@ -17,17 +17,17 @@ export default {
     },
     ridgeLasher: {
       id: 'ridgeLasher', name: 'Ridge Lasher', role: 'raider',
-      cost: { materials: 75, energy: 5 }, buildTime: 16, hp: 160, armor: 0, armorClass: 'light',
+      cost: { materials: 75, lumber: 5 }, buildTime: 16, hp: 160, armor: 0, armorClass: 'light',
       dmg: { min: 9, max: 13, type: 'normal' }, range: 1, cooldown: 0.9, speed: 3.2, sight: 6, supplyCost: 2,
     },
     warYak: {
       id: 'warYak', name: 'War Yak', role: 'heavyBeast',
-      cost: { materials: 150, energy: 30 }, buildTime: 32, hp: 480, armor: 3, armorClass: 'fortified',
+      cost: { materials: 150, lumber: 30 }, buildTime: 32, hp: 480, armor: 3, armorClass: 'fortified',
       dmg: { min: 16, max: 22, type: 'normal' }, range: 1, cooldown: 1.5, speed: 2.0, sight: 6, supplyCost: 2,
     },
     direwolf: {
       id: 'direwolf', name: 'Direwolf Rider', role: 'fastStriker',
-      cost: { materials: 130, energy: 50 }, buildTime: 26, hp: 260, armor: 1, armorClass: 'normal',
+      cost: { materials: 130, lumber: 50 }, buildTime: 26, hp: 260, armor: 1, armorClass: 'normal',
       dmg: { min: 14, max: 19, type: 'piercing' }, range: 1, cooldown: 1.0, speed: 3.6, sight: 7, supplyCost: 2,
     },
   },
@@ -40,12 +40,12 @@ export default {
     },
     barracks: {
       id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },
-      cost: { materials: 150, energy: 20 }, buildTime: 30, hp: 650, armor: 2, armorClass: 'fortified', sight: 6,
+      cost: { materials: 150, lumber: 20 }, buildTime: 30, hp: 650, armor: 2, armorClass: 'fortified', sight: 6,
       trains: ['ridgeLasher', 'warYak', 'direwolf'],
     },
     heroAltar: {
       id: 'heroAltar', name: 'Hero Altar', footprint: { w: 2, h: 2 },
-      cost: { materials: 150, energy: 40 }, buildTime: 35, hp: 500, armor: 2, armorClass: 'fortified', sight: 6,
+      cost: { materials: 150, lumber: 40 }, buildTime: 35, hp: 500, armor: 2, armorClass: 'fortified', sight: 6,
       trains: ['beastcaller'],
     },
   },
@@ -53,7 +53,7 @@ export default {
   heroes: {
     beastcaller: {
       id: 'beastcaller', name: 'Beastcaller', role: 'hero',
-      cost: { materials: 260, energy: 60 }, buildTime: 45,
+      cost: { materials: 260, lumber: 60 }, buildTime: 45,
       hp: 580, armor: 2, armorClass: 'normal', dmg: { min: 19, max: 27, type: 'normal' },
       range: 1, cooldown: 1.1, speed: 2.7, sight: 8, cargoCapacity: 0, supplyCost: 5,
       abilities: ['rendingPounce', 'primalHowl', 'mendFlesh'],

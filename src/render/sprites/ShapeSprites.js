@@ -119,12 +119,11 @@ export function getBuildingSprite(isTownHall, color, wPx, hPx) {
   return canvas;
 }
 
-// Gold mines and energy nodes render as a big glowing circle rather than a
-// flat diamond — a radial gradient plus a few darker flecks sells a
-// "shiny ore deposit" read without needing an actual image asset.
+// Gold mines render as a big glowing circle rather than a flat diamond — a
+// radial gradient plus a few darker flecks sells a "shiny ore deposit" read
+// without needing an actual image asset.
 const RESOURCE_PALETTES = {
   materials: { inner: '#fff2b8', mid: '#e8b93a', outer: '#a9761c', fleck: 'rgba(90,55,10,0.5)' },
-  energy: { inner: '#d6f3ff', mid: '#4fb3e8', outer: '#1f5e82', fleck: 'rgba(10,45,65,0.5)' },
 };
 
 export function getResourceNodeSprite(resourceType, sizePx) {
