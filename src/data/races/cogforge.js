@@ -36,7 +36,7 @@ export default {
 
   buildings: {
     foundry: {
-      id: 'foundry', name: 'Foundry', isTownHall: true, footprint: { w: 3, h: 3 },
+      id: 'foundry', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1200, armor: 5, armorClass: 'fortified', sight: 8,
       providesSupply: 10, trains: ['wrenchHand'],
     },

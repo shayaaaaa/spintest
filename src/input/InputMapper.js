@@ -3,7 +3,7 @@ import { issueGatherOrder } from '../systems/GatheringSystem.js';
 import { Visibility } from '../world/FogOfWar.js';
 import { tileVisibility } from '../render/layers/FogLayer.js';
 
-const PICK_RADIUS = 0.55;
+const PICK_RADIUS = 0.65;
 const FORMATION_SPACING = 0.9;
 
 // Arranges `count` units in a compact grid centered on the origin, as

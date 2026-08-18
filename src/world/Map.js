@@ -16,9 +16,11 @@ export class GameMap {
     this.terrain = new Uint8Array(this.width * this.height).fill(Terrain.GRASS);
     this.spawnPoints = levelData.spawnPoints || [];
     this.resourceNodeSpecs = levelData.resourceNodes || [];
+    this.trees = levelData.trees || [];
 
     this._applyTerrainPatches(levelData.terrainPatches || []);
     this._applyObstacles(levelData.obstacles || []);
+    this._applyTrees(this.trees);
   }
 
   _applyTerrainPatches(patches) {
@@ -38,6 +40,14 @@ export class GameMap {
   _applyObstacles(obstacles) {
     for (const ob of obstacles) {
       this.grid.setRectBlocked(ob.x, ob.y, ob.w || 1, ob.h || 1, true);
+    }
+  }
+
+  // Trees act as pathing obstacles, like the genre convention this
+  // prototype follows — each tree blocks its own single tile.
+  _applyTrees(trees) {
+    for (const tree of trees) {
+      this.grid.setBlocked(tree.x, tree.y, true);
     }
   }
 

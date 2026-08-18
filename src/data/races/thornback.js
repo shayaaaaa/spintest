@@ -35,7 +35,7 @@ export default {
 
   buildings: {
     campfireHearth: {
-      id: 'campfireHearth', name: 'Campfire Hearth', isTownHall: true, footprint: { w: 3, h: 3 },
+      id: 'campfireHearth', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1150, armor: 4, armorClass: 'fortified', sight: 8,
       providesSupply: 10, trains: ['snarehand'],
     },

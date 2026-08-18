@@ -10,13 +10,45 @@ export function startPlacement(ctx, view, ownerId, buildingTypeId) {
   const race = ctx.racesById[ctx.players[ownerId].raceId];
   const def = race.buildings[buildingTypeId];
   if (!def) return;
+  const footprint = def.footprint || { w: 2, h: 2 };
+  const spot = findNearestOpenSpot(ctx, footprint, view.camera.x, view.camera.y);
   view.buildGhost = {
     ownerId, typeId: buildingTypeId, def,
-    footprint: def.footprint || { w: 2, h: 2 },
-    x: view.camera.x, y: view.camera.y,
+    footprint,
+    x: spot.x, y: spot.y,
     valid: false,
   };
   refreshValidity(ctx, view.buildGhost);
+}
+
+// The ghost has to start somewhere — camera center is the natural default,
+// but that's exactly where the player's town hall (or now, trees) tend to
+// sit, so a blind default there is usually invalid on the very first frame.
+// Search outward in rings for the nearest fully-walkable footprint instead.
+function findNearestOpenSpot(ctx, footprint, cx, cy) {
+  const isOpen = (topLeftX, topLeftY) => {
+    for (let y = topLeftY; y < topLeftY + footprint.h; y++) {
+      for (let x = topLeftX; x < topLeftX + footprint.w; x++) {
+        if (!ctx.map.grid.isWalkable(x, y)) return false;
+      }
+    }
+    return true;
+  };
+
+  const originX = Math.round(cx - footprint.w / 2);
+  const originY = Math.round(cy - footprint.h / 2);
+  if (isOpen(originX, originY)) return { x: originX + footprint.w / 2, y: originY + footprint.h / 2 };
+
+  for (let radius = 1; radius <= 15; radius++) {
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue; // ring only
+        const tx = originX + dx, ty = originY + dy;
+        if (isOpen(tx, ty)) return { x: tx + footprint.w / 2, y: ty + footprint.h / 2 };
+      }
+    }
+  }
+  return { x: cx, y: cy }; // fall back — validity check will just mark it invalid
 }
 
 export function cancelPlacement(view) {

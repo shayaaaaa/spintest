@@ -36,7 +36,7 @@ export default {
 
   buildings: {
     hiveCore: {
-      id: 'hiveCore', name: 'Hive Core', isTownHall: true, footprint: { w: 3, h: 3 },
+      id: 'hiveCore', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1100, armor: 3, armorClass: 'fortified', sight: 8,
       providesSupply: 10, trains: ['larvaDrudge'],
     },

@@ -1,4 +1,5 @@
 import { Terrain } from '../../world/Map.js';
+import { getTreeSprite } from '../sprites/ShapeSprites.js';
 
 const TERRAIN_COLORS = {
   [Terrain.GRASS]: '#3a6b35',
@@ -27,5 +28,19 @@ export function drawTerrain(ctx2d, camera, map) {
       ctx2d.fillStyle = TERRAIN_COLORS[type] || TERRAIN_COLORS[Terrain.GRASS];
       ctx2d.fillRect(Math.floor(p.x), Math.floor(p.y), Math.ceil(ppt) + 1, Math.ceil(ppt) + 1);
     }
+  }
+
+  drawTrees(ctx2d, camera, map, minTx, maxTx, minTy, maxTy);
+}
+
+function drawTrees(ctx2d, camera, map, minTx, maxTx, minTy, maxTy) {
+  if (!map.trees || map.trees.length === 0) return;
+  const size = camera.pixelsPerTile * 1.4;
+  for (const tree of map.trees) {
+    if (tree.x < minTx - 1 || tree.x > maxTx + 1 || tree.y < minTy - 1 || tree.y > maxTy + 1) continue;
+    const variant = (tree.x * 7 + tree.y * 13) % 2;
+    const sprite = getTreeSprite(size, variant);
+    const p = camera.worldToScreen(tree.x + 0.5, tree.y + 0.5);
+    ctx2d.drawImage(sprite, p.x - sprite.width / 2, p.y - sprite.height / 2);
   }
 }

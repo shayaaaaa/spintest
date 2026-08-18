@@ -42,10 +42,12 @@ function alphaFor(entity, visibility) {
 function drawResourceNode(ctx2d, camera, gameCtx, node, ppt) {
   const vis = visibilityFor(node, gameCtx);
   if (vis === Visibility.HIDDEN) return;
-  const sprite = getResourceNodeSprite(node.resourceType, ppt * 0.8);
+  const diameter = ppt * 1.5;
+  const sprite = getResourceNodeSprite(node.resourceType, diameter);
   const p = camera.worldToScreen(node.x, node.y);
   ctx2d.globalAlpha = alphaFor(node, vis);
   ctx2d.drawImage(sprite, p.x - sprite.width / 2, p.y - sprite.height / 2);
+  drawLabel(ctx2d, node.name, p.x, p.y, diameter);
   ctx2d.globalAlpha = 1;
 }
 
@@ -56,16 +58,32 @@ function drawBuilding(ctx2d, camera, gameCtx, b, ppt) {
   const wPx = b.footprint.w * ppt, hPx = b.footprint.h * ppt;
   const sprite = getBuildingSprite(b.isTownHall, color, wPx, hPx);
   const topLeft = camera.worldToScreen(b.x - b.footprint.w / 2, b.y - b.footprint.h / 2);
+  const center = camera.worldToScreen(b.x, b.y);
   ctx2d.globalAlpha = alphaFor(b, vis);
   ctx2d.drawImage(sprite, topLeft.x, topLeft.y);
+  drawLabel(ctx2d, b.name, center.x, center.y, Math.min(wPx, hPx));
   ctx2d.globalAlpha = 1;
+}
+
+// Draws an entity's name centered on it, sized to fit its footprint/diameter.
+function drawLabel(ctx2d, text, cx, cy, boxSize) {
+  if (!text) return;
+  const fontSize = Math.max(8, Math.min(13, boxSize * 0.22));
+  ctx2d.font = `600 ${fontSize}px -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif`;
+  ctx2d.textAlign = 'center';
+  ctx2d.textBaseline = 'middle';
+  ctx2d.lineWidth = Math.max(2, fontSize * 0.28);
+  ctx2d.strokeStyle = 'rgba(0,0,0,0.75)';
+  ctx2d.strokeText(text, cx, cy);
+  ctx2d.fillStyle = '#ffffff';
+  ctx2d.fillText(text, cx, cy);
 }
 
 function drawUnit(ctx2d, camera, gameCtx, u, ppt) {
   const vis = visibilityFor(u, gameCtx);
   if (vis !== Visibility.VISIBLE) return;
   const color = gameCtx.players[u.ownerId]?.race.color || NEUTRAL_COLOR;
-  const size = ppt * (u.isHero ? 0.85 : u.role === 'worker' ? 0.55 : 0.7);
+  const size = ppt * (u.isHero ? 0.85 : u.role === 'worker' ? 0.75 : 0.7);
   const sprite = getUnitSprite(u.role, color, size);
   const p = camera.worldToScreen(u.x, u.y);
   ctx2d.globalAlpha = alphaFor(u, vis);
@@ -73,9 +91,13 @@ function drawUnit(ctx2d, camera, gameCtx, u, ppt) {
   ctx2d.globalAlpha = 1;
 
   if (u.cargoAmount > 0) {
+    const cx = p.x + size * 0.34, cy = p.y - size * 0.34, r = size * 0.2;
     ctx2d.fillStyle = u.cargoType === 'energy' ? '#4fb3e8' : '#d9b23a';
     ctx2d.beginPath();
-    ctx2d.arc(p.x + size * 0.32, p.y - size * 0.32, size * 0.14, 0, Math.PI * 2);
+    ctx2d.arc(cx, cy, r, 0, Math.PI * 2);
     ctx2d.fill();
+    ctx2d.strokeStyle = 'rgba(0,0,0,0.7)';
+    ctx2d.lineWidth = Math.max(1, r * 0.25);
+    ctx2d.stroke();
   }
 }
