@@ -53,9 +53,17 @@ export function loadFromLocalStorage() {
 }
 
 export function hasSavedGame() {
-  return !!localStorage.getItem(STORAGE_KEY);
+  try {
+    return !!localStorage.getItem(STORAGE_KEY);
+  } catch {
+    return false;
+  }
 }
 
 export function clearSavedGame() {
-  localStorage.removeItem(STORAGE_KEY);
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+  } catch {
+    // ignore — nothing to clear if storage isn't accessible
+  }
 }
