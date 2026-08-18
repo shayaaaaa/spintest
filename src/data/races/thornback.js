@@ -29,7 +29,6 @@ export default {
       id: 'direwolf', name: 'Direwolf Rider', role: 'fastStriker',
       cost: { materials: 130, energy: 50 }, buildTime: 26, hp: 260, armor: 1, armorClass: 'normal',
       dmg: { min: 14, max: 19, type: 'piercing' }, range: 1, cooldown: 1.0, speed: 3.6, sight: 7, supplyCost: 3,
-      requiresTech: 'ironHide',
     },
   },
 
@@ -37,22 +36,17 @@ export default {
     campfireHearth: {
       id: 'campfireHearth', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1150, armor: 4, armorClass: 'fortified', sight: 8,
-      providesSupply: 10, trains: ['snarehand'],
+      providesSupply: 40, trains: ['snarehand'],
     },
-    beastPen: {
-      id: 'beastPen', name: 'Beast Pen', footprint: { w: 2, h: 2 },
-      cost: { materials: 120 }, buildTime: 34, hp: 580, armor: 1, armorClass: 'fortified', sight: 6,
-      trains: ['ridgeLasher', 'warYak'], researches: ['packTactics'],
+    barracks: {
+      id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 20 }, buildTime: 30, hp: 650, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['ridgeLasher', 'warYak', 'direwolf'],
     },
-    warcamp: {
-      id: 'warcamp', name: 'Warcamp', footprint: { w: 2, h: 2 },
-      cost: { materials: 170, energy: 55 }, buildTime: 44, hp: 680, armor: 2, armorClass: 'fortified', sight: 6,
-      trains: ['direwolf'], researches: ['ironHide'], requiresTech: 'packTactics',
-    },
-    totemCircle: {
-      id: 'totemCircle', name: 'Totem Circle', footprint: { w: 1, h: 1 },
-      cost: { materials: 75 }, buildTime: 18, hp: 380, armor: 1, armorClass: 'fortified', sight: 5,
-      providesSupply: 6,
+    heroAltar: {
+      id: 'heroAltar', name: 'Hero Altar', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 40 }, buildTime: 35, hp: 500, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['beastcaller'],
     },
   },
 

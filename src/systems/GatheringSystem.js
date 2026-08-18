@@ -52,10 +52,12 @@ function beginDeposit(ctx, unit, dropoff) {
 }
 
 function nearestDropoff(ctx, unit) {
+  // Only the Townhall accepts deposits — any other qualifying building
+  // being picked instead reads as "the worker isn't traveling anywhere"
+  // whenever one happens to be built near a resource.
   let best = null, bestDist = Infinity;
   for (const b of ctx.store.buildingsOf(unit.ownerId)) {
-    if (b.underConstruction) continue;
-    if (!(b.trains?.length || b.isTownHall)) continue; // town hall / production buildings act as drop-off
+    if (b.underConstruction || !b.isTownHall) continue;
     const d = Math.hypot(b.x - unit.x, b.y - unit.y);
     if (d < bestDist) { bestDist = d; best = b; }
   }

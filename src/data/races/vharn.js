@@ -24,13 +24,11 @@ export default {
       id: 'spinemaw', name: 'Spinemaw', role: 'ranged',
       cost: { materials: 90, energy: 20 }, buildTime: 20, hp: 150, armor: 0, armorClass: 'light',
       dmg: { min: 10, max: 14, type: 'piercing' }, range: 4, cooldown: 1.3, speed: 2.4, sight: 7, supplyCost: 2,
-      requiresTech: 'mutationSurge',
     },
     carapaceTitan: {
       id: 'carapaceTitan', name: 'Carapace Titan', role: 'heavySiege',
       cost: { materials: 180, energy: 70 }, buildTime: 36, hp: 550, armor: 5, armorClass: 'fortified',
       dmg: { min: 20, max: 28, type: 'siege' }, range: 1, cooldown: 1.6, speed: 1.8, sight: 6, supplyCost: 5,
-      requiresTech: 'biomass',
     },
   },
 
@@ -38,22 +36,17 @@ export default {
     hiveCore: {
       id: 'hiveCore', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1100, armor: 3, armorClass: 'fortified', sight: 8,
-      providesSupply: 10, trains: ['larvaDrudge'],
+      providesSupply: 40, trains: ['larvaDrudge'],
     },
-    broodChamber: {
-      id: 'broodChamber', name: 'Brood Chamber', footprint: { w: 2, h: 2 },
-      cost: { materials: 115 }, buildTime: 32, hp: 560, armor: 1, armorClass: 'fortified', sight: 6,
-      trains: ['chitinSkirmisher'], researches: ['mutationSurge'],
+    barracks: {
+      id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 20 }, buildTime: 30, hp: 650, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['chitinSkirmisher', 'spinemaw', 'carapaceTitan'],
     },
-    carapaceWarren: {
-      id: 'carapaceWarren', name: 'Carapace Warren', footprint: { w: 2, h: 2 },
-      cost: { materials: 175, energy: 58 }, buildTime: 44, hp: 660, armor: 3, armorClass: 'fortified', sight: 6,
-      trains: ['spinemaw', 'carapaceTitan'], researches: ['biomass'], requiresTech: 'mutationSurge',
-    },
-    glandNest: {
-      id: 'glandNest', name: 'Gland Nest', footprint: { w: 1, h: 1 },
-      cost: { materials: 78 }, buildTime: 19, hp: 360, armor: 1, armorClass: 'fortified', sight: 5,
-      providesSupply: 6,
+    heroAltar: {
+      id: 'heroAltar', name: 'Hero Altar', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 40 }, buildTime: 35, hp: 500, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['genestitcher'],
     },
   },
 

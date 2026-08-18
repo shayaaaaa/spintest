@@ -87,13 +87,17 @@ export function runEconomyAndBuildOrder(ctx, ownerId, aiState) {
     }
   }
 
-  // Hero: train once, from the town hall, once a tier1 production building exists.
+  // Hero: train from the Hero Altar once it exists, and retrain there again
+  // whenever the hero has died — hasHero re-evaluates every decision tick,
+  // and a dead hero is already gone from the store by the time this runs.
   if (race.heroes) {
     const heroId = Object.keys(race.heroes)[0];
     const hasHero = [...ctx.store.unitsOf(ownerId)].some((u) => u.typeId === heroId);
-    const hasProdBuilding = [...ctx.store.buildingsOf(ownerId)].some((b) => b.trains?.length && b.typeId !== race.townHallId);
-    if (!hasHero && hasProdBuilding && townHall.queue.length === 0 && canAfford(player, race.heroes[heroId].cost)) {
-      enqueueTrain(ctx, townHall, heroId);
+    const altar = [...ctx.store.buildingsOf(ownerId)].find(
+      (b) => !b.underConstruction && b.queue.length === 0 && b.trains?.includes(heroId),
+    );
+    if (!hasHero && altar && canAfford(player, race.heroes[heroId].cost)) {
+      enqueueTrain(ctx, altar, heroId);
     }
   }
 }

@@ -24,13 +24,11 @@ export default {
       id: 'clanktread', name: 'Clanktread', role: 'lightVehicle',
       cost: { materials: 140, energy: 40 }, buildTime: 30, hp: 400, armor: 4, armorClass: 'fortified',
       dmg: { min: 14, max: 20, type: 'siege' }, range: 4, cooldown: 1.6, speed: 2.8, sight: 7, supplyCost: 4,
-      requiresTech: 'basicMachining',
     },
     ironclad: {
       id: 'ironclad', name: 'Ironclad', role: 'heavyVehicle',
       cost: { materials: 210, energy: 90 }, buildTime: 42, hp: 620, armor: 7, armorClass: 'fortified',
       dmg: { min: 22, max: 30, type: 'siege' }, range: 1, cooldown: 1.4, speed: 1.9, sight: 6, supplyCost: 6,
-      requiresTech: 'advancedPlating',
     },
   },
 
@@ -38,22 +36,17 @@ export default {
     foundry: {
       id: 'foundry', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1200, armor: 5, armorClass: 'fortified', sight: 8,
-      providesSupply: 10, trains: ['wrenchHand'],
+      providesSupply: 40, trains: ['wrenchHand'],
     },
-    assemblyYard: {
-      id: 'assemblyYard', name: 'Assembly Yard', footprint: { w: 2, h: 2 },
-      cost: { materials: 120 }, buildTime: 35, hp: 600, armor: 2, armorClass: 'fortified', sight: 6,
-      trains: ['stoker'], researches: ['basicMachining'],
+    barracks: {
+      id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 20 }, buildTime: 30, hp: 650, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['stoker', 'clanktread', 'ironclad'],
     },
-    gantryWorks: {
-      id: 'gantryWorks', name: 'Gantry Works', footprint: { w: 2, h: 2 },
-      cost: { materials: 180, energy: 60 }, buildTime: 45, hp: 700, armor: 3, armorClass: 'fortified', sight: 6,
-      trains: ['clanktread', 'ironclad'], researches: ['advancedPlating'], requiresTech: 'basicMachining',
-    },
-    coalstack: {
-      id: 'coalstack', name: 'Coalstack', footprint: { w: 1, h: 1 },
-      cost: { materials: 80 }, buildTime: 20, hp: 400, armor: 1, armorClass: 'fortified', sight: 5,
-      providesSupply: 6,
+    heroAltar: {
+      id: 'heroAltar', name: 'Hero Altar', footprint: { w: 2, h: 2 },
+      cost: { materials: 150, energy: 40 }, buildTime: 35, hp: 500, armor: 2, armorClass: 'fortified', sight: 6,
+      trains: ['ironwright'],
     },
   },
 
