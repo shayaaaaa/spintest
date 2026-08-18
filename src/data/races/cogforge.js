@@ -23,12 +23,12 @@ export default {
     clanktread: {
       id: 'clanktread', name: 'Clanktread', role: 'lightVehicle',
       cost: { materials: 140, energy: 40 }, buildTime: 30, hp: 400, armor: 4, armorClass: 'fortified',
-      dmg: { min: 14, max: 20, type: 'siege' }, range: 4, cooldown: 1.6, speed: 2.8, sight: 7, supplyCost: 4,
+      dmg: { min: 14, max: 20, type: 'siege' }, range: 4, cooldown: 1.6, speed: 2.8, sight: 7, supplyCost: 2,
     },
     ironclad: {
       id: 'ironclad', name: 'Ironclad', role: 'heavyVehicle',
       cost: { materials: 210, energy: 90 }, buildTime: 42, hp: 620, armor: 7, armorClass: 'fortified',
-      dmg: { min: 22, max: 30, type: 'siege' }, range: 1, cooldown: 1.4, speed: 1.9, sight: 6, supplyCost: 6,
+      dmg: { min: 22, max: 30, type: 'siege' }, range: 1, cooldown: 1.4, speed: 1.9, sight: 6, supplyCost: 2,
     },
   },
 
@@ -36,7 +36,7 @@ export default {
     foundry: {
       id: 'foundry', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1200, armor: 5, armorClass: 'fortified', sight: 8,
-      providesSupply: 40, trains: ['wrenchHand'],
+      trains: ['wrenchHand'],
     },
     barracks: {
       id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },

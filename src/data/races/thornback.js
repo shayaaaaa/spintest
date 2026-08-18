@@ -23,12 +23,12 @@ export default {
     warYak: {
       id: 'warYak', name: 'War Yak', role: 'heavyBeast',
       cost: { materials: 150, energy: 30 }, buildTime: 32, hp: 480, armor: 3, armorClass: 'fortified',
-      dmg: { min: 16, max: 22, type: 'normal' }, range: 1, cooldown: 1.5, speed: 2.0, sight: 6, supplyCost: 4,
+      dmg: { min: 16, max: 22, type: 'normal' }, range: 1, cooldown: 1.5, speed: 2.0, sight: 6, supplyCost: 2,
     },
     direwolf: {
       id: 'direwolf', name: 'Direwolf Rider', role: 'fastStriker',
       cost: { materials: 130, energy: 50 }, buildTime: 26, hp: 260, armor: 1, armorClass: 'normal',
-      dmg: { min: 14, max: 19, type: 'piercing' }, range: 1, cooldown: 1.0, speed: 3.6, sight: 7, supplyCost: 3,
+      dmg: { min: 14, max: 19, type: 'piercing' }, range: 1, cooldown: 1.0, speed: 3.6, sight: 7, supplyCost: 2,
     },
   },
 
@@ -36,7 +36,7 @@ export default {
     campfireHearth: {
       id: 'campfireHearth', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1150, armor: 4, armorClass: 'fortified', sight: 8,
-      providesSupply: 40, trains: ['snarehand'],
+      trains: ['snarehand'],
     },
     barracks: {
       id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },

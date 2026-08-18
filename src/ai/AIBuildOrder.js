@@ -6,7 +6,6 @@ import { createBuilding } from '../entities/Building.js';
 // units/techtree), so the same code drives all three races without
 // per-race literal step lists to keep in sync by hand.
 const WORKER_TARGET = 7;
-const SUPPLY_BUFFER = 3;
 
 function ownTownHall(ctx, ownerId, race) {
   for (const b of ctx.store.buildingsOf(ownerId)) if (b.typeId === race.townHallId) return b;
@@ -26,10 +25,6 @@ function productionBuildingDefs(race) {
   return Object.values(race.buildings).filter((b) => !b.isTownHall && b.trains?.length);
 }
 
-function supplyBuildingDef(race) {
-  return Object.values(race.buildings).find((b) => !b.isTownHall && b.providesSupply && !b.trains?.length);
-}
-
 export function runEconomyAndBuildOrder(ctx, ownerId, aiState) {
   const player = ctx.players[ownerId];
   const race = ctx.racesById[player.raceId];
@@ -39,14 +34,6 @@ export function runEconomyAndBuildOrder(ctx, ownerId, aiState) {
   const workerCount = [...ctx.store.unitsOf(ownerId)].filter((u) => u.canGather).length;
   if (workerCount < WORKER_TARGET && townHall.queue.length === 0) {
     enqueueTrain(ctx, townHall, race.workerTypeId);
-  }
-
-  const { used, cap } = currentSupply(ctx, ownerId);
-  if (cap - used < SUPPLY_BUFFER) {
-    const supplyDef = supplyBuildingDef(race);
-    if (supplyDef && canAfford(player, supplyDef.cost) && !aiState.pendingBuildingType) {
-      buildAt(ctx, ownerId, supplyDef, nearTownHall(ctx, townHall, aiState));
-    }
   }
 
   const prodDefs = productionBuildingDefs(race);

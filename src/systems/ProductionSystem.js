@@ -1,15 +1,29 @@
 import { createUnit } from '../entities/Unit.js';
 import { moveUnitTo } from './MovementSystem.js';
+import { balance } from '../data/balance.js';
 
 function raceOf(ctx, ownerId) {
   return ctx.racesById[ctx.players[ownerId].raceId];
 }
 
+// Population cap is a flat per-player constant (balance.maxPopulation) —
+// not building-derived. Workers cost 1, standard combat units cost 2,
+// heroes cost 5 (set per-unit in the race data via supplyCost). Counts
+// units already queued-but-not-yet-spawned too, not just living ones —
+// otherwise queuing several trains back-to-back (each individually still
+// under cap at enqueue time) could blow past the cap once they all land.
 export function currentSupply(ctx, ownerId) {
-  let used = 0, cap = 0;
+  const race = raceOf(ctx, ownerId);
+  let used = 0;
   for (const u of ctx.store.unitsOf(ownerId)) used += u.supplyCost || 0;
-  for (const b of ctx.store.buildingsOf(ownerId)) if (!b.underConstruction) cap += b.providesSupply || 0;
-  return { used, cap };
+  for (const b of ctx.store.buildingsOf(ownerId)) {
+    for (const job of b.queue) {
+      if (job.kind !== 'unit') continue;
+      const def = race.units[job.id] || race.heroes?.[job.id];
+      used += def?.supplyCost ?? 0;
+    }
+  }
+  return { used, cap: balance.maxPopulation };
 }
 
 export function canAfford(player, cost) {

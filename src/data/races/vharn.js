@@ -28,7 +28,7 @@ export default {
     carapaceTitan: {
       id: 'carapaceTitan', name: 'Carapace Titan', role: 'heavySiege',
       cost: { materials: 180, energy: 70 }, buildTime: 36, hp: 550, armor: 5, armorClass: 'fortified',
-      dmg: { min: 20, max: 28, type: 'siege' }, range: 1, cooldown: 1.6, speed: 1.8, sight: 6, supplyCost: 5,
+      dmg: { min: 20, max: 28, type: 'siege' }, range: 1, cooldown: 1.6, speed: 1.8, sight: 6, supplyCost: 2,
     },
   },
 
@@ -36,7 +36,7 @@ export default {
     hiveCore: {
       id: 'hiveCore', name: 'Townhall', isTownHall: true, footprint: { w: 3, h: 3 },
       cost: { materials: 400 }, buildTime: 90, hp: 1100, armor: 3, armorClass: 'fortified', sight: 8,
-      providesSupply: 40, trains: ['larvaDrudge'],
+      trains: ['larvaDrudge'],
     },
     barracks: {
       id: 'barracks', name: 'Barracks', footprint: { w: 2, h: 2 },
