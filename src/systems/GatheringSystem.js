@@ -9,23 +9,24 @@ export function issueGatherOrder(ctx, unit, node) {
   leaveGatherNode(ctx, unit); // drop any previous reservation/queue spot before taking a new one
   unit.order = { type: 'gather', nodeId: node.id };
   unit.gatherTimer = 0;
-  travelToNodeAndHarvest(ctx, unit, node);
+  routeToNode(ctx, unit, node);
 }
 
-// Always routes through movement before harvesting — used both for the
-// initial order and for every repeat trip after a deposit, so a unit can
-// never start "harvesting" from wherever it happens to be standing (e.g.
-// still at the drop-off building).
-function travelToNodeAndHarvest(ctx, unit, node) {
-  // moveUnitTo sets state to 'moving' for the trip; arriveAtNode (the
-  // onArrive callback) claims a harvest slot or joins the queue once the
-  // unit reaches the node's general vicinity.
-  moveUnitTo(ctx, unit, node.x, node.y, (ctx2, u) => arriveAtNode(ctx2, u, node));
-}
-
-function arriveAtNode(ctx, unit, node) {
+// Decides where a unit heading for `node` should actually walk to and sends
+// it straight there — used both for the initial order and for every repeat
+// trip after a deposit. Deliberately never routes through the node's own
+// center point: if multiple workers are sent to the same node, sending them
+// all toward that one shared coordinate first (even briefly) recreates the
+// same "several units converging on one exact spot" instability that made
+// single-unit movement oscillate a few rounds ago — just with a crowd. Each
+// unit's own harvest-slot or queue-ring point (both already distinct per
+// unit) is resolved immediately and used as the one and only movement
+// target, so no two units traveling to the same node are ever headed to the
+// same place at the same time.
+function routeToNode(ctx, unit, node) {
   if (unit.cargoAmount > 0 && unit.cargoType !== node.resourceType) {
-    // Switching resource types with cargo held: deposit first.
+    // Switching resource types with cargo held: deposit first, then resume
+    // toward this node from updateGathering's deposit-complete branch.
     return goToDropoff(ctx, unit);
   }
   if (node.amount <= 0) {
@@ -40,10 +41,10 @@ function arriveAtNode(ctx, unit, node) {
   }
 }
 
-// Reserves a harvest-ring slot for `unit` and sends it the short remaining
-// distance from the node's center out to that slot's point — this is what
-// actually spreads workers around the node instead of stacking them on its
-// center. The harvest timer only starts once the unit reaches its slot.
+// Reserves a harvest-ring slot for `unit` and sends it straight there —
+// this is what actually spreads workers around the node instead of
+// stacking them on its center. The harvest timer only starts once the
+// unit reaches its slot.
 function grantHarvestSlot(ctx, unit, node) {
   const slot = freeSlotIndex(node);
   node.harvesterIds.add(unit.id);
@@ -71,7 +72,8 @@ function enqueue(ctx, unit, node) {
   unit.gatherSlot = undefined;
   unit.state = 'gatherQueued';
   node.waitQueue.push(unit.id);
-  const pt = queueSlotPoint(node, node.waitQueue.length - 1);
+  node.queueSeq = (node.queueSeq || 0) + 1;
+  const pt = queueSlotPoint(node, node.queueSeq);
   moveUnitTo(ctx, unit, pt.x, pt.y, (ctx2, u) => { u.state = 'gatherQueued'; });
 }
 
@@ -81,7 +83,17 @@ function promoteFromQueue(ctx, node) {
   while (node.waitQueue.length > 0 && canHarvest(node)) {
     const nextId = node.waitQueue.shift();
     const next = ctx.store.get(nextId);
-    if (!next || next.gatherNodeId !== node.id || next.state !== 'gatherQueued') continue; // stale entry
+    // A unit still listed in node.waitQueue is — by construction — still
+    // validly reserved for this node: leaveGatherNode (called on every
+    // reassignment and on death) is the only other thing that ever removes
+    // an entry, so membership here already means "still wants this node".
+    // Checking live `state` on top of that is wrong, not just redundant:
+    // enqueue() briefly sets state to 'moving' for the short walk out to
+    // the queue ring point, so a unit mid-walk would get treated as stale
+    // and skipped here — except it's already been shift()-ed off the
+    // queue, so it would never be promoted at all, stuck forever once its
+    // walk finishes and state flips back to 'gatherQueued'.
+    if (!next || next.gatherNodeId !== node.id) continue; // stale entry (dead / reassigned)
     if (node.amount <= 0) { next.state = 'idle'; next.order = null; next.gatherNodeId = null; continue; }
     grantHarvestSlot(ctx, next, node);
     return;
@@ -168,7 +180,7 @@ export function updateGathering(ctx, dt) {
         ctx.eventBus.emit('resourcesChanged', { ownerId: unit.ownerId });
         unit.cargoAmount = 0;
         const node = unit.gatherNodeId ? ctx.store.get(unit.gatherNodeId) : null;
-        if (node && node.amount > 0) travelToNodeAndHarvest(ctx, unit, node);
+        if (node && node.amount > 0) routeToNode(ctx, unit, node);
         else { unit.state = 'idle'; unit.order = null; }
       }
     }
