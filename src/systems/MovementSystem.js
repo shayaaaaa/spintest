@@ -1,8 +1,12 @@
 import { findPath } from '../world/Pathfinding.js';
 
-const ARRIVE_EPS = 0.05;
+const ARRIVE_EPS = 0.08;
 const SEPARATION_RADIUS = 0.6;
 const SEPARATION_STRENGTH = 1.6;
+// Within this distance of a unit's *final* waypoint, separation tapers off
+// entirely so units can actually settle at a shared destination instead of
+// neighbors continuously shoving them back out of the arrival radius.
+const SEPARATION_TAPER_RADIUS = 0.4;
 
 // Issues a move order: sets state, requests a path via the shared queue.
 // `onArrive` (optional) fires once the unit reaches the destination —
@@ -57,15 +61,25 @@ export function updateMovement(ctx, dt) {
     }
 
     // Steer toward waypoint, with light separation from nearby moving units
-    // so groups don't perfectly overlap.
+    // so groups don't perfectly overlap — tapered out near the final
+    // waypoint so units can settle at a shared destination instead of
+    // fighting their neighbors for it forever.
     let steerX = dx / dist;
     let steerY = dy / dist;
-    const [sepX, sepY] = separation(ctx, unit);
-    steerX += sepX * SEPARATION_STRENGTH;
-    steerY += sepY * SEPARATION_STRENGTH;
+    const isFinalWaypoint = unit.pathIndex === unit.path.length - 1;
+    if (!isFinalWaypoint || dist > SEPARATION_TAPER_RADIUS) {
+      const [sepX, sepY] = separation(ctx, unit);
+      steerX += sepX * SEPARATION_STRENGTH;
+      steerY += sepY * SEPARATION_STRENGTH;
+    }
     const steerLen = Math.hypot(steerX, steerY) || 1;
 
-    const step = unit.speed * dt;
+    // Never step further than the remaining distance to the waypoint —
+    // without this, a unit within one tick's travel of a waypoint
+    // overshoots past it every frame, and combined with separation's
+    // restoring push that overshoot becomes a stable back-and-forth
+    // oscillation instead of settling.
+    const step = Math.min(unit.speed * dt, dist);
     unit.x += (steerX / steerLen) * step;
     unit.y += (steerY / steerLen) * step;
     unit.facing = Math.atan2(steerY, steerX);

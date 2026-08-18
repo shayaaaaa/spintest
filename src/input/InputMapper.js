@@ -4,6 +4,25 @@ import { Visibility } from '../world/FogOfWar.js';
 import { tileVisibility } from '../render/layers/FogLayer.js';
 
 const PICK_RADIUS = 0.55;
+const FORMATION_SPACING = 0.9;
+
+// Arranges `count` units in a compact grid centered on the origin, as
+// {dx, dy} offsets to add to a group move order's target point.
+function formationOffsets(count) {
+  if (count <= 1) return [{ dx: 0, dy: 0 }];
+  const cols = Math.ceil(Math.sqrt(count));
+  const rows = Math.ceil(count / cols);
+  const offsets = [];
+  for (let i = 0; i < count; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    offsets.push({
+      dx: (col - (cols - 1) / 2) * FORMATION_SPACING,
+      dy: (row - (rows - 1) / 2) * FORMATION_SPACING,
+    });
+  }
+  return offsets;
+}
 
 // Translates TouchInput gestures into game commands / camera moves.
 // `view` is the mutable UI/render state object owned by main.js:
@@ -120,7 +139,11 @@ export class InputMapper {
         }
       }
     } else {
-      for (const u of selected) moveUnitTo(this.ctx, u, world.x, world.y);
+      // Spread a group move across a small formation instead of sending
+      // every unit to the identical tile — avoids units permanently
+      // contending for one spot, and reads better than a stack.
+      const offsets = formationOffsets(selected.length);
+      selected.forEach((u, i) => moveUnitTo(this.ctx, u, world.x + offsets[i].dx, world.y + offsets[i].dy));
     }
   }
 
