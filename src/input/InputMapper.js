@@ -1,5 +1,5 @@
 import { moveUnitTo, stopUnit } from '../systems/MovementSystem.js';
-import { issueGatherOrder } from '../systems/GatheringSystem.js';
+import { issueGatherOrder, leaveGatherNode } from '../systems/GatheringSystem.js';
 import { Visibility } from '../world/FogOfWar.js';
 import { tileVisibility } from '../render/layers/FogLayer.js';
 
@@ -122,6 +122,12 @@ export class InputMapper {
       if (!hit) this.view.selection.clear();
       return;
     }
+
+    // Any new order supersedes a unit's previous one — including a resource
+    // node reservation, active or queued. Drop it here so a unit pulled off
+    // gather duty never leaves a phantom slot/queue spot that nothing will
+    // ever come back to claim.
+    for (const u of selected) leaveGatherNode(this.ctx, u);
 
     if (hit && hit.kind === 'resourceNode') {
       for (const u of selected) {

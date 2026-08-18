@@ -1,3 +1,5 @@
+import { leaveGatherNode } from './GatheringSystem.js';
+
 // Handles death/destruction: a short fade-out grace period (for the death
 // animation in EffectsLayer), then actual removal + index cleanup.
 const DEATH_FADE_SECONDS = 0.6;
@@ -30,8 +32,7 @@ export function updateLifecycle(ctx, dt) {
 
 function cleanupReferences(ctx, entity) {
   if (entity.kind === 'unit' && entity.gatherNodeId) {
-    const node = ctx.store.get(entity.gatherNodeId);
-    node?.harvesterIds.delete(entity.id);
+    leaveGatherNode(ctx, entity); // frees its harvest slot / queue spot and promotes a replacement
   }
   // Clear anyone targeting the dead entity so combat re-acquires next tick.
   for (const u of ctx.store.all) {
