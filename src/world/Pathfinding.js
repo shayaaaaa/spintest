@@ -123,23 +123,38 @@ function smooth(path) {
 }
 
 // Scans progressively wider rings around the (blocked) target tile until a
-// walkable one turns up, returning the closest match at the smallest ring
-// that has one. A fixed 1-tile ring isn't enough for anything with a
-// footprint bigger than 1x1 — e.g. a 3x3 building's immediate ring is
+// walkable one turns up. A fixed 1-tile ring isn't enough for anything with
+// a footprint bigger than 1x1 — e.g. a 3x3 building's immediate ring is
 // entirely its own footprint — so this expands outward instead of giving up.
+//
+// Within the first ring that has any candidate, tiles are ranked by how
+// tightly they hug the target first (closest to tx,ty), and only tie-broken
+// by distance to the walker. A same-radius ring mixes corner tiles (~1.4x
+// farther from the target in a straight line) with edge tiles directly
+// against it — always taking whichever is nearest the walker would send
+// units to the diagonally-nearest corner even when a flush edge tile is
+// barely any further to walk to, leaving a visibly bigger gap than
+// necessary once they arrive.
 function nearestWalkableNeighbor(grid, tx, ty, fromX, fromY, maxRadius = 6) {
   for (let radius = 1; radius <= maxRadius; radius++) {
-    let best = null, bestDist = Infinity;
+    const candidates = [];
     for (let dy = -radius; dy <= radius; dy++) {
       for (let dx = -radius; dx <= radius; dx++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== radius) continue; // only this ring's new tiles
         const nx = tx + dx, ny = ty + dy;
-        if (!grid.isWalkable(nx, ny)) continue;
-        const d = (nx - fromX) ** 2 + (ny - fromY) ** 2;
-        if (d < bestDist) { bestDist = d; best = { tx: nx, ty: ny }; }
+        if (grid.isWalkable(nx, ny)) candidates.push({ tx: nx, ty: ny });
       }
     }
-    if (best) return best;
+    if (candidates.length === 0) continue;
+    candidates.sort((a, b) => {
+      const hugA = (a.tx - tx) ** 2 + (a.ty - ty) ** 2;
+      const hugB = (b.tx - tx) ** 2 + (b.ty - ty) ** 2;
+      if (hugA !== hugB) return hugA - hugB;
+      const walkA = (a.tx - fromX) ** 2 + (a.ty - fromY) ** 2;
+      const walkB = (b.tx - fromX) ** 2 + (b.ty - fromY) ** 2;
+      return walkA - walkB;
+    });
+    return candidates[0];
   }
   return null;
 }
