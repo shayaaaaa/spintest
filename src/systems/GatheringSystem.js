@@ -1,5 +1,5 @@
 import { moveUnitTo } from './MovementSystem.js';
-import { canHarvest, harvestSlotPoint, queueSlotPoint } from '../entities/ResourceNode.js';
+import { canHarvest, harvestSlotPoint, queueSlotPoint, freeQueueSlotIndex } from '../entities/ResourceNode.js';
 
 const HARVEST_SECONDS_PER_LOAD = 4;
 const DEPOSIT_SECONDS = 0.5;
@@ -72,9 +72,16 @@ function enqueue(ctx, unit, node) {
   unit.gatherSlot = undefined;
   unit.state = 'gatherQueued';
   node.waitQueue.push(unit.id);
-  node.queueSeq = (node.queueSeq || 0) + 1;
-  const pt = queueSlotPoint(node, node.queueSeq);
+  const qslot = freeQueueSlotIndex(node);
+  node.queueSlots[qslot] = unit.id;
+  unit.queueSlot = qslot;
+  const pt = queueSlotPoint(node, qslot);
   moveUnitTo(ctx, unit, pt.x, pt.y, (ctx2, u) => { u.state = 'gatherQueued'; });
+}
+
+function releaseQueueSlot(node, unit) {
+  if (unit.queueSlot !== undefined) node.queueSlots[unit.queueSlot] = null;
+  unit.queueSlot = undefined;
 }
 
 // Hands a freed harvest slot to whoever's been waiting longest, skipping
@@ -94,6 +101,7 @@ function promoteFromQueue(ctx, node) {
     // queue, so it would never be promoted at all, stuck forever once its
     // walk finishes and state flips back to 'gatherQueued'.
     if (!next || next.gatherNodeId !== node.id) continue; // stale entry (dead / reassigned)
+    releaseQueueSlot(node, next); // freeing this up for the next joiner regardless of outcome below
     if (node.amount <= 0) { next.state = 'idle'; next.order = null; next.gatherNodeId = null; continue; }
     grantHarvestSlot(ctx, next, node);
     return;
@@ -113,6 +121,7 @@ export function leaveGatherNode(ctx, unit) {
     } else {
       const qi = node.waitQueue.indexOf(unit.id);
       if (qi !== -1) node.waitQueue.splice(qi, 1);
+      releaseQueueSlot(node, unit);
     }
   }
   unit.gatherNodeId = null;

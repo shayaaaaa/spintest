@@ -20,13 +20,21 @@ const RESOURCE_NODE_NAMES = { materials: 'Gold Mine', lumber: 'Tree' };
 // neighbor's parked spot. 1.5 keeps slots on tiles that are never adjacent.
 const HARVEST_RING_RADIUS = 1.5;
 const QUEUE_RING_RADIUS = 2.4;
-// The golden angle — placing successive points this far apart around a
-// circle never repeats or clusters regardless of how many points end up
-// placed, unlike dividing the circle by however many are queued *right
-// now* (which reshuffles every existing point's angle as the queue grows
-// or shrinks, and can coincidentally re-land two different points on the
-// same angle at different queue sizes).
-const GOLDEN_ANGLE = Math.PI * (3 - Math.sqrt(5));
+// Fixed pool of queue-ring positions, reused the same way harvest slots
+// are (first free index, freed again once its occupant leaves) rather than
+// an ever-growing sequence number. An earlier version used the golden angle
+// so positions would never *exactly* repeat as the queue grows and shrinks
+// over a session — but the golden angle's own defining property is that it
+// makes *close* recurrences at Fibonacci-numbered step gaps (13, 21, 34,
+// 55...), and those recurrences get closer the further into the sequence
+// you go. Across a long session at one busy node, queueSeq climbs well
+// past those gaps, and two workers queued that far apart can end up well
+// inside separation range of each other. A small fixed, evenly-divided
+// pool has a guaranteed minimum spacing that never degrades, however long
+// the session runs or however many workers cycle through the queue —
+// 12 is comfortably more than would ever realistically queue at one node
+// (the whole match's population cap is 20 workers total).
+const QUEUE_POOL_SIZE = 12;
 
 // Finite harvestable node with a max concurrent-harvester slot count —
 // prevents workers stacking on one node and creates expansion pressure.
@@ -41,7 +49,7 @@ export function createResourceNode(store, { resourceType, amount, x, y, maxHarve
     harvesterIds: new Set(),
     harvestSlots: new Array(maxHarvesters).fill(null), // slot index -> unit id
     waitQueue: [], // unit ids waiting for a free slot, FIFO (first arrived, first served)
-    queueSeq: 0, // ever-increasing counter — see queueSlotPoint
+    queueSlots: new Array(QUEUE_POOL_SIZE).fill(null), // slot index -> unit id, for queueSlotPoint
     ...Transform(x, y),
   };
   return store.add(entity);
@@ -58,12 +66,19 @@ export function harvestSlotPoint(node, slotIndex) {
   return { x: node.x + Math.cos(angle) * HARVEST_RING_RADIUS, y: node.y + Math.sin(angle) * HARVEST_RING_RADIUS };
 }
 
-// A point on the wider ring for the `queueSeq`-th worker ever to queue at
-// this node — pass node.queueSeq after incrementing it. Using an
-// ever-increasing sequence number instead of the queue's current
-// length/index means positions never collide as the queue grows and
-// shrinks over a session (see GOLDEN_ANGLE).
-export function queueSlotPoint(node, queueSeq) {
-  const angle = queueSeq * GOLDEN_ANGLE;
+// Finds a free index in the node's fixed queue-position pool (mirrors
+// harvestSlotPoint's freeSlotIndex in GatheringSystem.js). Wraps modulo in
+// the extreme case every pool slot is somehow occupied at once, rather
+// than crashing — acceptable degradation for a case that shouldn't happen
+// given the pool is sized well above the game's population cap.
+export function freeQueueSlotIndex(node) {
+  for (let i = 0; i < node.queueSlots.length; i++) if (!node.queueSlots[i]) return i;
+  return Math.floor(Math.random() * node.queueSlots.length);
+}
+
+// A point on the wider ring for pool slot `slotIndex`, spread evenly
+// around the full circle — see QUEUE_POOL_SIZE.
+export function queueSlotPoint(node, slotIndex) {
+  const angle = (slotIndex / QUEUE_POOL_SIZE) * Math.PI * 2;
   return { x: node.x + Math.cos(angle) * QUEUE_RING_RADIUS, y: node.y + Math.sin(angle) * QUEUE_RING_RADIUS };
 }

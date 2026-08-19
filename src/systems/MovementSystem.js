@@ -22,7 +22,20 @@ export function moveUnitTo(ctx, unit, tx, ty, onArrive = null) {
     if (unit.state !== 'moving' || !unit.moveTarget || unit.moveTarget.x !== tx || unit.moveTarget.y !== ty) return;
     unit.path = path || [];
     unit.pathIndex = 0;
+    unit.finalTargetPrecise = isPreciseFinalTarget(unit.path, tx, ty);
   });
+}
+
+// True when the path's last waypoint is genuinely the requested tile — i.e.
+// (tx,ty) was walkable and findPath went straight there. False when the
+// requested tile was blocked (e.g. a building's center) and findPath
+// silently substituted the nearest walkable neighbor instead: that
+// substitute is only a tile, with no sub-tile precision behind it, so it's
+// wrong to steer at the original (unreachable) point in that case — see the
+// isFinalWaypoint branch in updateMovement.
+function isPreciseFinalTarget(path, tx, ty) {
+  const last = path[path.length - 1];
+  return !!last && last.tx === Math.floor(tx) && last.ty === Math.floor(ty);
 }
 
 export function stopUnit(unit) {
@@ -46,7 +59,25 @@ export function updateMovement(ctx, dt) {
     }
 
     const wp = unit.path[unit.pathIndex];
-    const target = { x: wp.tx + 0.5, y: wp.ty + 0.5 };
+    const isFinalWaypoint = unit.pathIndex === unit.path.length - 1;
+    // Intermediate waypoints are tile-centers purely for routing around
+    // obstacles. The *final* one should be the exact destination that was
+    // actually requested (unit.moveTarget, already stored at full precision
+    // by moveUnitTo) rather than the center of whichever tile it floors
+    // into — snapping the final stop to a tile center means two different
+    // requested destinations only need to floor onto the same tile to
+    // collapse into one literal shared target, which is exactly how
+    // multiple units end up fighting over "the same spot" even when each
+    // was given its own distinct point to head to.
+    //
+    // That only holds when the requested point was itself walkable, though
+    // (finalTargetPrecise) — if it was blocked (e.g. a building's center)
+    // and findPath silently substituted the nearest walkable tile instead,
+    // steering at the original unreachable point would send every unit
+    // toward that same blocked spot regardless of which substitute tile
+    // their own path actually resolved to. In that case the substitute
+    // tile's center is the most precision there is.
+    const target = (isFinalWaypoint && unit.finalTargetPrecise) ? unit.moveTarget : { x: wp.tx + 0.5, y: wp.ty + 0.5 };
     let dx = target.x - unit.x;
     let dy = target.y - unit.y;
     let dist = Math.hypot(dx, dy);
@@ -66,7 +97,6 @@ export function updateMovement(ctx, dt) {
     // fighting their neighbors for it forever.
     let steerX = dx / dist;
     let steerY = dy / dist;
-    const isFinalWaypoint = unit.pathIndex === unit.path.length - 1;
     if (!isFinalWaypoint || dist > SEPARATION_TAPER_RADIUS) {
       const [sepX, sepY] = separation(ctx, unit);
       steerX += sepX * SEPARATION_STRENGTH;
@@ -120,4 +150,5 @@ export function repathNow(ctx, unit) {
   const path = findPath(ctx.map.grid, Math.floor(unit.x), Math.floor(unit.y), Math.floor(unit.moveTarget.x), Math.floor(unit.moveTarget.y));
   unit.path = path || [];
   unit.pathIndex = 0;
+  unit.finalTargetPrecise = isPreciseFinalTarget(unit.path, unit.moveTarget.x, unit.moveTarget.y);
 }
