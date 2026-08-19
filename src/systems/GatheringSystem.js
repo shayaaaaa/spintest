@@ -1,5 +1,8 @@
 import { moveUnitTo } from './MovementSystem.js';
-import { canHarvest, harvestSlotPoint, queueLinePoint, queueLanePoint, queueLineCoords, QUEUE_LANE_TOLERANCE } from '../entities/ResourceNode.js';
+import { canHarvest, harvestSlotPoint, queueLinePoint, queueLanePoint, queueLineCoords, resetQueuePlaces, QUEUE_LANE_TOLERANCE } from '../entities/ResourceNode.js';
+
+// Halfway to the next row: above this a place belongs to a folded-back row.
+const QUEUE_OUTER_ROW_LATERAL = 0.45;
 
 const HARVEST_SECONDS_PER_LOAD = 4;
 const DEPOSIT_SECONDS = 0.5;
@@ -98,6 +101,7 @@ function enqueue(ctx, unit, node) {
     // node instead, and is deterministic rather than depending on which
     // unit happens to join first.
     node.queueLineAngle = lineAngleAwayFromHome(ctx, unit, node);
+    resetQueuePlaces(node);
   }
   node.waitQueue.push(unit.id);
   walkToLineSpot(ctx, unit, node, node.waitQueue.length - 1);
@@ -116,11 +120,19 @@ function enqueue(ctx, unit, node) {
 function walkToLineSpot(ctx, unit, node, index) {
   // Who this worker is queued behind, so it can hold its distance rather than
   // walking into them — see QUEUE_FOLLOW_GAP in MovementSystem.
-  unit.queueAheadId = index > 0 ? node.waitQueue[index - 1] : null;
-  const spot = queueLinePoint(node, index);
+  // Whoever this worker should hold its distance behind. For the front of the
+  // line that is the worker just promoted out of it: that one is still standing
+  // on the front place while it walks off to the node, and without this the new
+  // front walks straight onto the spot it has not vacated yet — with a busy
+  // mine promoting every few seconds, that handoff is where the queue spends
+  // most of its time. The reference goes stale harmlessly, since the brake only
+  // acts on someone actually ahead and within following distance.
+  unit.queueAheadId = index > 0 ? node.waitQueue[index - 1] : (node.lastPromotedId ?? null);
+  const spot = queueLinePoint(node, index, ctx.map.grid);
   const arriveInLine = (ctx2, u) => { u.state = 'gatherQueued'; };
   const here = queueLineCoords(node, unit.x, unit.y);
-  const targetAlong = queueLineCoords(node, spot.x, spot.y).along;
+  const there = queueLineCoords(node, spot.x, spot.y);
+  const targetAlong = there.along;
   // The line is one-way traffic: it only ever flows *inward*, because reflow
   // exclusively moves people closer to the node. So a worker whose place is
   // further out than where it currently stands — a returning worker rejoining
@@ -129,15 +141,24 @@ function walkToLineSpot(ctx, unit, node, index) {
   // the deepest remaining overlaps. Outward moves therefore always take the
   // flanking lane, and only inward moves use the line itself.
   const goingOutward = targetAlong > here.along + 0.15;
-  const inLine = !goingOutward && Math.abs(here.lateral) <= QUEUE_LANE_TOLERANCE;
+  const inLine = !goingOutward && Math.abs(here.lateral - there.lateral) <= QUEUE_LANE_TOLERANCE;
   if (inLine) {
     moveUnitTo(ctx, unit, spot.x, spot.y, arriveInLine);
     return;
   }
-  // Stage on whichever flank the worker is already closest to, so joining the
-  // lane never means crossing the line to reach it.
-  const side = Math.abs(here.lateral) > 0.3 ? Math.sign(here.lateral) : 1;
-  const lane = queueLanePoint(node, index, side);
+  // Which flank to stage on. For a place in the first row, whichever side the
+  // worker is already nearest, so joining the lane never means crossing the
+  // line to reach it. For a place in a folded-back row, always from beyond the
+  // stack instead: a worker coming from the Townhall is level with the first
+  // row, so going by the side it stands on would stage it on the far side of
+  // the line from its own place and march it across every row in between —
+  // measured as the cause of every overlap left once queues grow past one row.
+  // Both rules are needed; using the row rule alone regresses single-row
+  // queues, which the near-side rule already handles cleanly.
+  const side = there.lateral > QUEUE_OUTER_ROW_LATERAL
+    ? 1                                                     // folded-back row: come from beyond the stack
+    : (Math.abs(here.lateral - there.lateral) > 0.3 ? Math.sign(here.lateral - there.lateral) : 1);
+  const lane = queueLanePoint(node, index, side, ctx.map.grid);
   moveUnitTo(ctx, unit, lane.x, lane.y, (ctx2, u) => {
     moveUnitTo(ctx2, u, spot.x, spot.y, arriveInLine);
   });
@@ -151,6 +172,7 @@ function walkToLineSpot(ctx, unit, node, index) {
 function reflowQueueLine(ctx, node) {
   if (node.waitQueue.length === 0) {
     node.queueLineAngle = null; // next queue that forms here picks a fresh direction
+    resetQueuePlaces(node);
     return;
   }
   node.waitQueue.forEach((unitId, index) => {
@@ -178,6 +200,7 @@ function promoteFromQueue(ctx, node) {
     // finishes and state flips back to 'gatherQueued'.
     if (!next || next.gatherNodeId !== node.id) continue; // stale entry (dead / reassigned)
     if (node.amount <= 0) { next.state = 'idle'; next.order = null; next.gatherNodeId = null; continue; }
+    node.lastPromotedId = next.id; // the new front yields to it while it clears the spot
     grantHarvestSlot(ctx, next, node);
     reflowQueueLine(ctx, node); // everyone still waiting steps forward to close the gap
     return;

@@ -49,6 +49,9 @@ export function createResourceNode(store, { resourceType, amount, x, y, maxHarve
     harvestSlots: new Array(maxHarvesters).fill(null), // slot index -> unit id
     waitQueue: [], // unit ids waiting for a free slot, FIFO (first arrived, first served)
     queueLineAngle: null, // direction the wait line trails in — set when the first worker joins an empty queue, cleared when it empties
+    queuePlaces: null,    // resolved, walkable standing places along that line (see queueLinePoint)
+    queueProbe: 0,
+    lastPromotedId: null, // worker most recently promoted out of the queue (see walkToLineSpot)
     ...Transform(x, y),
   };
   return store.add(entity);
@@ -68,9 +71,56 @@ export function harvestSlotPoint(node, slotIndex) {
 // Position `index` (0 = next up) in the wait line, along node.queueLineAngle
 // — caller is responsible for having set that angle first (see enqueue in
 // GatheringSystem.js).
-export function queueLinePoint(node, index) {
-  const dist = LINE_START_DISTANCE + index * LINE_SPACING;
-  return { x: node.x + Math.cos(node.queueLineAngle) * dist, y: node.y + Math.sin(node.queueLineAngle) * dist };
+// How many workers stand in one row before the queue folds back alongside
+// itself, and how far apart those rows sit. A line that just kept going would
+// eventually run off usable ground — on this map a deep queue at the nearest
+// mine reaches into the lake by its thirteenth place, and every spot past the
+// shore resolves to the same handful of walkable tiles, landing that whole tail
+// of the queue on top of each other. Folding keeps every place on open ground,
+// and keeps a big queue from sprawling halfway across the map besides. Rows
+// alternate direction, so consecutive places stay next to each other and the
+// queue still reads as one continuous line doubling back on itself.
+const QUEUE_ROW_LENGTH = 8;
+const QUEUE_ROW_SPACING = 0.9;
+
+// Nth candidate spot along the folded line, ignoring whether it is usable.
+function queueCandidate(node, n) {
+  const col = n % QUEUE_ROW_LENGTH;
+  const row = Math.floor(n / QUEUE_ROW_LENGTH);
+  const along = LINE_START_DISTANCE + (row % 2 === 0 ? col : QUEUE_ROW_LENGTH - 1 - col) * LINE_SPACING;
+  const lateral = row * QUEUE_ROW_SPACING;
+  const ca = Math.cos(node.queueLineAngle), sa = Math.sin(node.queueLineAngle);
+  return { x: node.x + ca * along - sa * lateral, y: node.y + sa * along + ca * lateral };
+}
+
+// Where the worker `index` places back in the line should stand.
+//
+// Candidates that land on unusable ground — a tree, the lake edge — are skipped
+// rather than used, because a blocked destination is quietly replaced by the
+// nearest walkable tile when the path is built, and several blocked places in a
+// row all collapse onto the same few tiles by the shore, parking that whole
+// stretch of the queue on top of each other. Skipping leaves a visible gap
+// where the obstacle is, which reads as people stepping around it. Results are
+// cached per node and thrown away whenever the line's direction is reset.
+export function queueLinePoint(node, index, grid) {
+  if (!node.queuePlaces) { node.queuePlaces = []; node.queueProbe = 0; }
+  while (node.queuePlaces.length <= index) {
+    const p = queueCandidate(node, node.queueProbe++);
+    // The guard keeps a queue hemmed in by terrain from searching forever; past
+    // it, take whatever comes rather than hang.
+    if (!grid || grid.isWalkable(Math.floor(p.x), Math.floor(p.y)) || node.queueProbe > QUEUE_PLACE_SEARCH_LIMIT) {
+      node.queuePlaces.push(p);
+    }
+  }
+  return node.queuePlaces[index];
+}
+
+const QUEUE_PLACE_SEARCH_LIMIT = 200;
+
+// Called whenever the line's direction changes, so stale places aren't reused.
+export function resetQueuePlaces(node) {
+  node.queuePlaces = null;
+  node.queueProbe = 0;
 }
 
 // How far to the side the approach lane sits. A queue is a wall: a worker
@@ -85,11 +135,15 @@ export function queueLinePoint(node, index) {
 const QUEUE_LANE_OFFSET = 1.8;
 
 // The staging point beside line position `index`, on the `side` (+1/-1) flank.
-export function queueLanePoint(node, index, side) {
-  const spot = queueLinePoint(node, index);
+export function queueLanePoint(node, index, side, grid) {
+  const spot = queueLinePoint(node, index, grid);
   const perp = node.queueLineAngle + Math.PI / 2;
   return { x: spot.x + Math.cos(perp) * QUEUE_LANE_OFFSET * side, y: spot.y + Math.sin(perp) * QUEUE_LANE_OFFSET * side };
 }
+
+// True when the queue's own geometry says (x,y) is already standing in the
+// place the line wants it — same distance out, same row.
+
 
 // Position of (x,y) in the queue's own frame: `along` measures out from the node
 // down the line, `lateral` measures off to its side. Used to tell a worker
