@@ -64,6 +64,19 @@ function freeSlotIndex(node) {
   return 0; // shouldn't happen — caller already checked canHarvest()
 }
 
+// Direction from the node continuing the line drawn from the unit's owner's
+// Townhall through the node — i.e. straight out the far side of the node
+// from home base. Falls back to pointing toward the unit itself if no
+// Townhall can be found (e.g. it's been destroyed), so a line still forms.
+function lineAngleAwayFromHome(ctx, unit, node) {
+  let townhall = null;
+  for (const b of ctx.store.buildingsOf(unit.ownerId)) {
+    if (b.isTownHall && !b.underConstruction) { townhall = b; break; }
+  }
+  if (!townhall) return Math.atan2(unit.y - node.y, unit.x - node.x);
+  return Math.atan2(node.y - townhall.y, node.x - townhall.x);
+}
+
 // No open slot: join the wait line — a single-file queue trailing away from
 // the node, like a checkout line — and wait. Purely passive — updateGathering
 // does nothing for a queued unit; it's woken up by promoteFromQueue whenever
@@ -74,10 +87,16 @@ function enqueue(ctx, unit, node) {
   unit.gatherSlot = undefined;
   unit.state = 'gatherQueued';
   if (node.waitQueue.length === 0) {
-    // This joiner establishes which way the line trails — back toward
-    // wherever they approached from, so it reads as a continuation of the
-    // walk they were already on rather than pointing some arbitrary way.
-    node.queueLineAngle = Math.atan2(unit.y - node.y, unit.x - node.x);
+    // This joiner establishes which way the line trails. Point it away from
+    // the player's Townhall (continuing the townhall->node line past the
+    // node) rather than back toward wherever this unit happened to approach
+    // from — workers usually approach a resource FROM their Townhall, so
+    // "toward the joiner" sends the line sprawling back across the same
+    // ground units already walk to get here, cutting across the middle of
+    // the base. Anchoring away from home keeps the line tucked beside the
+    // node instead, and is deterministic rather than depending on which
+    // unit happens to join first.
+    node.queueLineAngle = lineAngleAwayFromHome(ctx, unit, node);
   }
   node.waitQueue.push(unit.id);
   const pt = queueLinePoint(node, node.waitQueue.length - 1);

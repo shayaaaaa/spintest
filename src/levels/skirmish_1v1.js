@@ -7,8 +7,8 @@ const W = 44, H = 44;
 
 function mirrorNodes(x, y) {
   return [
-    { resourceType: 'materials', amount: 900, x, y, maxHarvesters: 3 },
-    { resourceType: 'materials', amount: 900, x: x + 2, y: y + 1, maxHarvesters: 3 },
+    { resourceType: 'materials', amount: 900, x, y, maxHarvesters: 1 },
+    { resourceType: 'materials', amount: 900, x: x + 2, y: y + 1, maxHarvesters: 1 },
   ];
 }
 
