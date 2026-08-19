@@ -45,8 +45,8 @@ const FALLEN_ANGLE = 1.45;  // radians: flat on the ground, near enough
 function felledTransform(tree, time) {
   const elapsed = time - tree.felledAt;
   const t = Math.max(0, Math.min(1, elapsed / TREE_FALL_SECONDS));
-  // Ease out, so it tips slowly at first and drops away at the end the way
-  // something heavy pivoting on its base does.
+  // Squared, so it tips slowly at first and comes down fastest at the end —
+  // the way something heavy pivoting on its base actually goes over.
   const fall = Math.min(1, t / FALL_PORTION);
   const angle = FALLEN_ANGLE * fall * fall;
   const alpha = t < FADE_START ? 1 : 1 - (t - FADE_START) / (1 - FADE_START);
