@@ -182,7 +182,12 @@ export class InputMapper {
         const requireCurrentlyVisible = e.kind === 'unit';
         if (requireCurrentlyVisible ? vis !== Visibility.VISIBLE : vis === Visibility.HIDDEN) continue;
       }
-      const radius = e.kind === 'building' ? Math.max(e.footprint.w, e.footprint.h) / 2 : PICK_RADIUS;
+      // Resource nodes are tappable across the whole circle they're drawn as,
+      // never smaller than the baseline touch target — a bigger gold mine
+      // should be tappable where it actually looks, not just near its middle.
+      const radius = e.kind === 'building' ? Math.max(e.footprint.w, e.footprint.h) / 2
+        : e.kind === 'resourceNode' ? Math.max(PICK_RADIUS, e.radius ?? PICK_RADIUS)
+        : PICK_RADIUS;
       const d = Math.hypot(e.x - x, e.y - y);
       if (d <= radius && d < bestDist) { bestDist = d; best = e; }
     }

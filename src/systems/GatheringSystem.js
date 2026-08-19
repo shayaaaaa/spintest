@@ -32,15 +32,52 @@ function routeToNode(ctx, unit, node) {
     // toward this node from updateGathering's deposit-complete branch.
     return goToDropoff(ctx, unit);
   }
-  if (node.amount <= 0) {
-    unit.state = 'idle';
-    unit.order = null;
-    return;
-  }
+  if (node.amount <= 0) return sendToAnotherNode(ctx, unit, node);
   if (canHarvest(node)) {
     grantHarvestSlot(ctx, unit, node);
   } else {
     enqueue(ctx, unit, node);
+  }
+}
+
+// Nearest node of the same resource that still has something left in it.
+function nearestAvailableNode(ctx, unit, resourceType, excludeId) {
+  let best = null, bestDist = Infinity;
+  for (const n of ctx.store.resourceNodes) {
+    if (n.id === excludeId || n.resourceType !== resourceType || n.amount <= 0) continue;
+    const d = Math.hypot(n.x - unit.x, n.y - unit.y);
+    if (d < bestDist) { bestDist = d; best = n; }
+  }
+  return best;
+}
+
+// The node `unit` was working has nothing left. Move it to the nearest one of
+// the same kind that does, so a worker whose tree is stripped carries on with
+// the next tree instead of standing there — only going idle when there is
+// genuinely nothing of that resource left anywhere.
+function sendToAnotherNode(ctx, unit, node) {
+  const replacement = nearestAvailableNode(ctx, unit, node.resourceType, node.id);
+  if (replacement) return issueGatherOrder(ctx, unit, replacement);
+  unit.state = 'idle';
+  unit.order = null;
+  unit.gatherNodeId = null;
+  unit.gatherSlot = undefined;
+  unit.queueAheadId = null;
+}
+
+// Empties the wait line of a node that has run dry, sending everyone who was
+// waiting on to their next node.
+function releaseExhaustedQueue(ctx, node) {
+  const waiting = node.waitQueue.splice(0, node.waitQueue.length);
+  node.queueLineAngle = null;
+  resetQueuePlaces(node);
+  for (const id of waiting) {
+    const u = ctx.store.get(id);
+    if (!u || u.gatherNodeId !== node.id) continue;
+    u.gatherNodeId = null;
+    u.gatherSlot = undefined;
+    u.queueAheadId = null;
+    sendToAnotherNode(ctx, u, node);
   }
 }
 
@@ -170,6 +207,12 @@ function walkToLineSpot(ctx, unit, node, index) {
 // left) visibly steps forward to close it, the way a checkout line
 // shuffles up when the person at the front is served.
 function reflowQueueLine(ctx, node) {
+  // Nobody should be shuffled forward in a line for a node with nothing left to
+  // give. promoteFromQueue already releases the queue the moment a node runs
+  // dry, but guarding here too means no future caller can leave a queue waiting
+  // on an empty node — the failure this class of bug produces (workers standing
+  // still forever) is invisible until someone notices they stopped working.
+  if (node.amount <= 0) return releaseExhaustedQueue(ctx, node);
   if (node.waitQueue.length === 0) {
     node.queueLineAngle = null; // next queue that forms here picks a fresh direction
     resetQueuePlaces(node);
@@ -185,6 +228,13 @@ function reflowQueueLine(ctx, node) {
 // Hands a freed harvest slot to whoever's been waiting longest, skipping
 // anyone who died or was reassigned elsewhere since they queued.
 function promoteFromQueue(ctx, node) {
+  // A node that has run dry can never promote anyone — canHarvest is false for
+  // it — so its queue has to be let go here or every worker waiting on it waits
+  // forever. This is what stranded whole groups of workers standing motionless
+  // around a tree that had already been stripped: nothing else ever wakes a
+  // queued unit, so they simply never got another order.
+  if (node.amount <= 0) return releaseExhaustedQueue(ctx, node);
+
   while (node.waitQueue.length > 0 && canHarvest(node)) {
     const nextId = node.waitQueue.shift();
     const next = ctx.store.get(nextId);
@@ -199,7 +249,6 @@ function promoteFromQueue(ctx, node) {
     // so it would never be promoted at all, stuck forever once its walk
     // finishes and state flips back to 'gatherQueued'.
     if (!next || next.gatherNodeId !== node.id) continue; // stale entry (dead / reassigned)
-    if (node.amount <= 0) { next.state = 'idle'; next.order = null; next.gatherNodeId = null; continue; }
     node.lastPromotedId = next.id; // the new front yields to it while it clears the spot
     grantHarvestSlot(ctx, next, node);
     reflowQueueLine(ctx, node); // everyone still waiting steps forward to close the gap
@@ -291,7 +340,10 @@ export function updateGathering(ctx, dt) {
         unit.cargoAmount = 0;
         const node = unit.gatherNodeId ? ctx.store.get(unit.gatherNodeId) : null;
         if (node && node.amount > 0) routeToNode(ctx, unit, node);
-        else { unit.state = 'idle'; unit.order = null; }
+        // Whatever it was working is gone — carry on at the next one of the
+        // same kind rather than stopping here holding an empty order.
+        else if (node) sendToAnotherNode(ctx, unit, node);
+        else { unit.state = 'idle'; unit.order = null; unit.gatherNodeId = null; }
       }
     }
     // 'gatherQueued' units are passive — promoteFromQueue wakes them up.

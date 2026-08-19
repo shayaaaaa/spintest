@@ -1,4 +1,5 @@
 import { getUnitSprite, getBuildingSprite, getResourceNodeSprite } from '../sprites/ShapeSprites.js';
+import { nodeSpriteBox } from '../../entities/ResourceNode.js';
 import { Visibility } from '../../world/FogOfWar.js';
 import { tileVisibility } from './FogLayer.js';
 
@@ -46,7 +47,7 @@ function drawResourceNode(ctx2d, camera, gameCtx, node, ppt) {
   if (node.resourceType === 'lumber') return;
   const vis = visibilityFor(node, gameCtx);
   if (vis === Visibility.HIDDEN) return;
-  const diameter = ppt * 1.5;
+  const diameter = ppt * nodeSpriteBox(node); // sized from the node's own radius
   const sprite = getResourceNodeSprite(node.resourceType, diameter);
   const p = camera.worldToScreen(node.x, node.y);
   ctx2d.globalAlpha = alphaFor(node, vis);
