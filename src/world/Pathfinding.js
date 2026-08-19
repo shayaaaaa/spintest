@@ -54,7 +54,19 @@ export function findPath(grid, sx, sy, gx, gy, maxNodes = 2000) {
     if (!alt) return null;
     gx = alt.tx; gy = alt.ty;
   }
-  if (sx === gx && sy === gy) return [];
+  // Start and target share a tile — no A* search needed, but this must NOT
+  // resolve to an empty path. A queue-line/harvest-ring point can be well
+  // under a tile away from where the unit currently stands (LINE_SPACING is
+  // 0.9, smaller than one tile) yet still be a genuinely different point
+  // it hasn't reached yet. An empty array reads to updateMovement as
+  // "already arrived" and fires the arrival callback on the spot, without
+  // ever stepping the unit the remaining sub-tile distance — that's the
+  // mechanism behind units silently freezing short of (or exactly on top
+  // of) a neighboring queue slot instead of visibly walking the last bit
+  // in. Returning the one waypoint here instead lets the normal per-tick
+  // steer-and-arrive logic in updateMovement cover that last stretch, the
+  // same as it would for any other final waypoint.
+  if (sx === gx && sy === gy) return [{ tx: gx, ty: gy }];
 
   const open = new MinHeap();
   const key = (x, y) => y * grid.width + x;
