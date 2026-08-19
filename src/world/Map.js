@@ -51,6 +51,21 @@ export class GameMap {
     }
   }
 
+  treeAt(tx, ty) {
+    return this.trees.find((t) => t.x === tx && t.y === ty) || null;
+  }
+
+  // Takes a tree off the map for good and gives its tile back to pathfinding,
+  // which is the point: a stripped tree stops being an obstacle, opening routes
+  // that were closed while it stood.
+  removeTree(tx, ty) {
+    const i = this.trees.findIndex((t) => t.x === tx && t.y === ty);
+    if (i === -1) return false;
+    this.trees.splice(i, 1);
+    this.grid.setBlocked(tx, ty, false);
+    return true;
+  }
+
   terrainAt(tx, ty) {
     if (!this.grid.inBounds(tx, ty)) return Terrain.CLIFF;
     return this.terrain[this.grid.index(tx, ty)];

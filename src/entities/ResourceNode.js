@@ -28,6 +28,16 @@ export function nodeSpriteBox(node) {
   return (node.radius ?? DEFAULT_NODE_RADIUS) / NODE_SPRITE_FILL;
 }
 
+// How much a worker brings back per trip, by resource. Gold comes in bigger
+// loads than wood, so a mine pays out faster per round trip than a tree does
+// — a worker's own cargoCapacity still caps it, so a unit that can carry less
+// than this carries less.
+const CARRY_PER_LOAD = { materials: 10, lumber: 5 };
+
+export function carryPerLoad(node, unit) {
+  return Math.min(unit.cargoCapacity, CARRY_PER_LOAD[node.resourceType] ?? unit.cargoCapacity);
+}
+
 // Distance from the node's edge out to the harvester's centre. A worker's body
 // reaches 0.27 from its middle, so a slightly smaller value than that leaves
 // the two just touching rather than apart — a worker should look like it is

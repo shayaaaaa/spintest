@@ -176,6 +176,9 @@ export class InputMapper {
     const fog = this.ctx.fogByOwner[this.ctx.localPlayerId];
     for (const e of this.ctx.store.all) {
       if (e.hp === undefined && e.kind !== 'resourceNode') continue;
+      // A worked-out node is on its way out (a stripped tree is mid-fall) —
+      // don't let it swallow taps meant for whatever is still standing there.
+      if (e.kind === 'resourceNode' && e.amount <= 0) continue;
       const isOwn = e.ownerId === this.ctx.localPlayerId;
       if (!isOwn) {
         const vis = tileVisibility(fog, e.x, e.y);

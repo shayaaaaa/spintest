@@ -7,11 +7,11 @@ const W = 44, H = 44;
 
 function mirrorNodes(x, y) {
   return [
-    { resourceType: 'materials', amount: 900, x, y, maxHarvesters: 1 },
+    { resourceType: 'materials', amount: 10000, x, y, maxHarvesters: 1 },
     // Spaced so the two mines stay visibly separate now that they're drawn
     // wider — at the old +2,+1 their circles nearly met and one's label sat on
     // top of the other.
-    { resourceType: 'materials', amount: 900, x: x + 3, y: y + 1, maxHarvesters: 1 },
+    { resourceType: 'materials', amount: 10000, x: x + 3, y: y + 1, maxHarvesters: 1 },
   ];
 }
 

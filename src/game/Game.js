@@ -14,6 +14,7 @@ import { AIController } from '../ai/AIController.js';
 
 import { updateMovement } from '../systems/MovementSystem.js';
 import { updateGathering } from '../systems/GatheringSystem.js';
+import { updateResourceNodes } from '../systems/ResourceNodeSystem.js';
 import { updateProduction } from '../systems/ProductionSystem.js';
 import { updateCombat } from '../systems/CombatSystem.js';
 import { updateAbilities } from '../systems/AbilitySystem.js';
@@ -28,7 +29,7 @@ import { techtreesById } from '../data/techtree.js';
 import { levelsById } from '../levels/skirmish_1v1.js';
 
 export const racesById = { cogforge, thornback, vharn };
-const LUMBER_PER_TREE = 150;
+const LUMBER_PER_TREE = 500;
 
 export class Game {
   constructor({ levelId = 'skirmish_1v1', localPlayerId = 0, participants }) {
@@ -161,14 +162,29 @@ export class Game {
     }
 
     for (const n of snapshot.resourceNodes) createResourceNode(this.store, n);
+    this._pruneFelledTrees();
 
     this.spatialGrid.rebuild(this.store.all);
+  }
+
+  // The map is rebuilt from the level on load, so every tree comes back —
+  // including ones felled before the save. Drop any that no longer have a
+  // lumber node behind them, so a reloaded game matches what was left standing.
+  _pruneFelledTrees() {
+    const standing = new Set();
+    for (const n of this.store.resourceNodes) {
+      if (n.resourceType === 'lumber') standing.add(`${Math.floor(n.x)},${Math.floor(n.y)}`);
+    }
+    for (const tree of [...this.map.trees]) {
+      if (!standing.has(`${tree.x},${tree.y}`)) this.map.removeTree(tree.x, tree.y);
+    }
   }
 
   tick(dt) {
     this.time += dt;
     updateMovement(this, dt);
     updateGathering(this, dt);
+    updateResourceNodes(this);
     updateProduction(this, dt);
     updateCombat(this, dt);
     updateAbilities(this, dt);

@@ -24,7 +24,7 @@ export class Renderer {
     const { camera } = view;
     const ctx2d = this.ctx2d;
 
-    drawTerrain(ctx2d, camera, gameCtx.map);
+    drawTerrain(ctx2d, camera, gameCtx.map, gameCtx.time);
     drawEntities(ctx2d, camera, gameCtx);
     drawSelection(ctx2d, camera, gameCtx, view.selection);
     drawEffects(ctx2d, camera, view.effectsState);

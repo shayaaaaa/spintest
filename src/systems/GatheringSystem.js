@@ -1,5 +1,5 @@
 import { moveUnitTo } from './MovementSystem.js';
-import { canHarvest, harvestSlotPoint, queueLinePoint, queueLanePoint, queueLineCoords, resetQueuePlaces, QUEUE_LANE_TOLERANCE } from '../entities/ResourceNode.js';
+import { canHarvest, carryPerLoad, harvestSlotPoint, queueLinePoint, queueLanePoint, queueLineCoords, resetQueuePlaces, QUEUE_LANE_TOLERANCE } from '../entities/ResourceNode.js';
 
 // Halfway to the next row: above this a place belongs to a folded-back row.
 const QUEUE_OUTER_ROW_LATERAL = 0.45;
@@ -32,7 +32,7 @@ function routeToNode(ctx, unit, node) {
     // toward this node from updateGathering's deposit-complete branch.
     return goToDropoff(ctx, unit);
   }
-  if (node.amount <= 0) return sendToAnotherNode(ctx, unit, node);
+  if (node.amount <= 0) return sendToAnotherNode(ctx, unit, node.resourceType, node.id);
   if (canHarvest(node)) {
     grantHarvestSlot(ctx, unit, node);
   } else {
@@ -51,12 +51,13 @@ function nearestAvailableNode(ctx, unit, resourceType, excludeId) {
   return best;
 }
 
-// The node `unit` was working has nothing left. Move it to the nearest one of
+// The node `unit` was working is finished — worked out, or gone from the map
+// entirely once a stripped tree finished falling. Move it to the nearest one of
 // the same kind that does, so a worker whose tree is stripped carries on with
 // the next tree instead of standing there — only going idle when there is
 // genuinely nothing of that resource left anywhere.
-function sendToAnotherNode(ctx, unit, node) {
-  const replacement = nearestAvailableNode(ctx, unit, node.resourceType, node.id);
+function sendToAnotherNode(ctx, unit, resourceType, excludeId = null) {
+  const replacement = nearestAvailableNode(ctx, unit, resourceType, excludeId);
   if (replacement) return issueGatherOrder(ctx, unit, replacement);
   unit.state = 'idle';
   unit.order = null;
@@ -77,7 +78,7 @@ function releaseExhaustedQueue(ctx, node) {
     u.gatherNodeId = null;
     u.gatherSlot = undefined;
     u.queueAheadId = null;
-    sendToAnotherNode(ctx, u, node);
+    sendToAnotherNode(ctx, u, node.resourceType, node.id);
   }
 }
 
@@ -312,14 +313,16 @@ export function updateGathering(ctx, dt) {
       unit.gatherTimer -= dt;
       if (unit.gatherTimer <= 0) {
         const node = ctx.store.get(unit.gatherNodeId);
-        const want = unit.cargoCapacity - unit.cargoAmount;
+        // A full load is per-resource, not simply the worker's whole hold.
+        const load = node ? carryPerLoad(node, unit) : unit.cargoCapacity;
+        const want = load - unit.cargoAmount;
         const available = node ? node.amount : 0;
-        const take = Math.min(want, available, unit.cargoCapacity);
-        unit.cargoAmount = Math.min(unit.cargoCapacity, unit.cargoAmount + Math.max(take, 0));
+        const take = Math.min(want, available);
+        unit.cargoAmount = Math.min(load, unit.cargoAmount + Math.max(take, 0));
         if (node) node.amount = Math.max(0, node.amount - take);
 
         const nodeExhausted = !node || node.amount <= 0;
-        if (unit.cargoAmount >= unit.cargoCapacity || nodeExhausted) {
+        if (unit.cargoAmount >= load || nodeExhausted) {
           if (node) {
             node.harvesterIds.delete(unit.id);
             if (unit.gatherSlot !== undefined) node.harvestSlots[unit.gatherSlot] = null;
@@ -342,8 +345,10 @@ export function updateGathering(ctx, dt) {
         if (node && node.amount > 0) routeToNode(ctx, unit, node);
         // Whatever it was working is gone — carry on at the next one of the
         // same kind rather than stopping here holding an empty order.
-        else if (node) sendToAnotherNode(ctx, unit, node);
-        else { unit.state = 'idle'; unit.order = null; unit.gatherNodeId = null; }
+        // The node may be gone from the store altogether by now — a felled tree
+        // is removed once it has finished falling — so fall back to what this
+        // worker was carrying to know what it was gathering.
+        else sendToAnotherNode(ctx, unit, node ? node.resourceType : unit.cargoType, node ? node.id : null);
       }
     }
     // 'gatherQueued' units are passive — promoteFromQueue wakes them up.
