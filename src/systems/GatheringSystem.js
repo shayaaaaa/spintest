@@ -1,5 +1,5 @@
 import { moveUnitTo } from './MovementSystem.js';
-import { canHarvest, harvestSlotPoint, queueSlotPoint, freeQueueSlotIndex } from '../entities/ResourceNode.js';
+import { canHarvest, harvestSlotPoint, queueLinePoint } from '../entities/ResourceNode.js';
 
 const HARVEST_SECONDS_PER_LOAD = 4;
 const DEPOSIT_SECONDS = 0.5;
@@ -64,24 +64,42 @@ function freeSlotIndex(node) {
   return 0; // shouldn't happen — caller already checked canHarvest()
 }
 
-// No open slot: join the queue and wait at a nearby ring point. Purely
-// passive — updateGathering does nothing for a queued unit; it's woken up
-// by promoteFromQueue whenever an active harvester's slot frees.
+// No open slot: join the wait line — a single-file queue trailing away from
+// the node, like a checkout line — and wait. Purely passive — updateGathering
+// does nothing for a queued unit; it's woken up by promoteFromQueue whenever
+// an active harvester's slot frees, and reflowQueueLine below re-walks it
+// forward whenever the line ahead of it shortens.
 function enqueue(ctx, unit, node) {
   unit.gatherNodeId = node.id;
   unit.gatherSlot = undefined;
   unit.state = 'gatherQueued';
+  if (node.waitQueue.length === 0) {
+    // This joiner establishes which way the line trails — back toward
+    // wherever they approached from, so it reads as a continuation of the
+    // walk they were already on rather than pointing some arbitrary way.
+    node.queueLineAngle = Math.atan2(unit.y - node.y, unit.x - node.x);
+  }
   node.waitQueue.push(unit.id);
-  const qslot = freeQueueSlotIndex(node);
-  node.queueSlots[qslot] = unit.id;
-  unit.queueSlot = qslot;
-  const pt = queueSlotPoint(node, qslot);
+  const pt = queueLinePoint(node, node.waitQueue.length - 1);
   moveUnitTo(ctx, unit, pt.x, pt.y, (ctx2, u) => { u.state = 'gatherQueued'; });
 }
 
-function releaseQueueSlot(node, unit) {
-  if (unit.queueSlot !== undefined) node.queueSlots[unit.queueSlot] = null;
-  unit.queueSlot = undefined;
+// Re-walks every unit still in the wait line to its current position —
+// call after anything changes node.waitQueue's contents, so whoever's
+// behind a gap that opened up (front promoted, or someone in the middle
+// left) visibly steps forward to close it, the way a checkout line
+// shuffles up when the person at the front is served.
+function reflowQueueLine(ctx, node) {
+  if (node.waitQueue.length === 0) {
+    node.queueLineAngle = null; // next queue that forms here picks a fresh direction
+    return;
+  }
+  node.waitQueue.forEach((unitId, index) => {
+    const u = ctx.store.get(unitId);
+    if (!u) return;
+    const pt = queueLinePoint(node, index);
+    moveUnitTo(ctx, u, pt.x, pt.y, (ctx2, uu) => { uu.state = 'gatherQueued'; });
+  });
 }
 
 // Hands a freed harvest slot to whoever's been waiting longest, skipping
@@ -95,17 +113,18 @@ function promoteFromQueue(ctx, node) {
     // reassignment and on death) is the only other thing that ever removes
     // an entry, so membership here already means "still wants this node".
     // Checking live `state` on top of that is wrong, not just redundant:
-    // enqueue() briefly sets state to 'moving' for the short walk out to
-    // the queue ring point, so a unit mid-walk would get treated as stale
-    // and skipped here — except it's already been shift()-ed off the
-    // queue, so it would never be promoted at all, stuck forever once its
-    // walk finishes and state flips back to 'gatherQueued'.
+    // enqueue() briefly sets state to 'moving' for the short walk to its
+    // line spot, so a unit mid-walk would get treated as stale and
+    // skipped here — except it's already been shift()-ed off the queue,
+    // so it would never be promoted at all, stuck forever once its walk
+    // finishes and state flips back to 'gatherQueued'.
     if (!next || next.gatherNodeId !== node.id) continue; // stale entry (dead / reassigned)
-    releaseQueueSlot(node, next); // freeing this up for the next joiner regardless of outcome below
     if (node.amount <= 0) { next.state = 'idle'; next.order = null; next.gatherNodeId = null; continue; }
     grantHarvestSlot(ctx, next, node);
+    reflowQueueLine(ctx, node); // everyone still waiting steps forward to close the gap
     return;
   }
+  reflowQueueLine(ctx, node); // queue may have shrunk from skipped stale entries even with no promotion
 }
 
 // Removes a unit from whatever node it's currently reserved at (actively
@@ -121,7 +140,7 @@ export function leaveGatherNode(ctx, unit) {
     } else {
       const qi = node.waitQueue.indexOf(unit.id);
       if (qi !== -1) node.waitQueue.splice(qi, 1);
-      releaseQueueSlot(node, unit);
+      reflowQueueLine(ctx, node); // whoever was behind this unit steps forward
     }
   }
   unit.gatherNodeId = null;
