@@ -1,5 +1,5 @@
 import { moveUnitTo } from './MovementSystem.js';
-import { canHarvest, harvestSlotPoint, queueLinePoint } from '../entities/ResourceNode.js';
+import { canHarvest, harvestSlotPoint, queueLinePoint, queueLanePoint, queueLineCoords, QUEUE_LANE_TOLERANCE } from '../entities/ResourceNode.js';
 
 const HARVEST_SECONDS_PER_LOAD = 4;
 const DEPOSIT_SECONDS = 0.5;
@@ -51,6 +51,7 @@ function grantHarvestSlot(ctx, unit, node) {
   node.harvestSlots[slot] = unit.id;
   unit.gatherNodeId = node.id;
   unit.gatherSlot = slot;
+  unit.queueAheadId = null; // heading for the node itself now, not queued behind anyone
   unit.cargoType = node.resourceType;
   const pt = harvestSlotPoint(node, slot);
   moveUnitTo(ctx, unit, pt.x, pt.y, (ctx2, u) => {
@@ -99,8 +100,47 @@ function enqueue(ctx, unit, node) {
     node.queueLineAngle = lineAngleAwayFromHome(ctx, unit, node);
   }
   node.waitQueue.push(unit.id);
-  const pt = queueLinePoint(node, node.waitQueue.length - 1);
-  moveUnitTo(ctx, unit, pt.x, pt.y, (ctx2, u) => { u.state = 'gatherQueued'; });
+  walkToLineSpot(ctx, unit, node, node.waitQueue.length - 1);
+}
+
+// Sends `unit` to line position `index`, choosing between two ways of getting
+// there.
+//
+// A worker already standing in the line just walks straight to its new spot:
+// during a reflow everybody steps forward one place at once, in the same
+// direction and keeping the same gap, so a convoy like that never crosses
+// itself. A worker still on its way to the line is the problem case — coming
+// from the Townhall it would otherwise walk the whole length of the queue and
+// through every worker in it — so it is routed to a staging point out on the
+// flank first and steps in sideways from there. See QUEUE_LANE_OFFSET.
+function walkToLineSpot(ctx, unit, node, index) {
+  // Who this worker is queued behind, so it can hold its distance rather than
+  // walking into them — see QUEUE_FOLLOW_GAP in MovementSystem.
+  unit.queueAheadId = index > 0 ? node.waitQueue[index - 1] : null;
+  const spot = queueLinePoint(node, index);
+  const arriveInLine = (ctx2, u) => { u.state = 'gatherQueued'; };
+  const here = queueLineCoords(node, unit.x, unit.y);
+  const targetAlong = queueLineCoords(node, spot.x, spot.y).along;
+  // The line is one-way traffic: it only ever flows *inward*, because reflow
+  // exclusively moves people closer to the node. So a worker whose place is
+  // further out than where it currently stands — a returning worker rejoining
+  // at the back, most often — would be travelling against that flow and meet
+  // the whole queue head-on. Measured in the live game, that was every one of
+  // the deepest remaining overlaps. Outward moves therefore always take the
+  // flanking lane, and only inward moves use the line itself.
+  const goingOutward = targetAlong > here.along + 0.15;
+  const inLine = !goingOutward && Math.abs(here.lateral) <= QUEUE_LANE_TOLERANCE;
+  if (inLine) {
+    moveUnitTo(ctx, unit, spot.x, spot.y, arriveInLine);
+    return;
+  }
+  // Stage on whichever flank the worker is already closest to, so joining the
+  // lane never means crossing the line to reach it.
+  const side = Math.abs(here.lateral) > 0.3 ? Math.sign(here.lateral) : 1;
+  const lane = queueLanePoint(node, index, side);
+  moveUnitTo(ctx, unit, lane.x, lane.y, (ctx2, u) => {
+    moveUnitTo(ctx2, u, spot.x, spot.y, arriveInLine);
+  });
 }
 
 // Re-walks every unit still in the wait line to its current position —
@@ -116,8 +156,7 @@ function reflowQueueLine(ctx, node) {
   node.waitQueue.forEach((unitId, index) => {
     const u = ctx.store.get(unitId);
     if (!u) return;
-    const pt = queueLinePoint(node, index);
-    moveUnitTo(ctx, u, pt.x, pt.y, (ctx2, uu) => { uu.state = 'gatherQueued'; });
+    walkToLineSpot(ctx, u, node, index);
   });
 }
 
@@ -164,6 +203,7 @@ export function leaveGatherNode(ctx, unit) {
   }
   unit.gatherNodeId = null;
   unit.gatherSlot = undefined;
+  unit.queueAheadId = null;
 }
 
 function goToDropoff(ctx, unit) {

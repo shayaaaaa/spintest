@@ -47,7 +47,20 @@ function heuristic(ax, ay, bx, by) {
 
 // Finds a tile path from (sx,sy) to (gx,gy). Returns array of {tx,ty} or null.
 // maxNodes bounds worst-case search cost on large empty maps.
-export function findPath(grid, sx, sy, gx, gy, maxNodes = 2000) {
+// `occupied` (optional) is a Set of "x,y" keys for tiles held by units that are
+// standing still. Those tiles stay walkable but cost extra to cross, so a route
+// prefers to go around a crowd where there is a way around, and still goes
+// straight through when there isn't.
+//
+// The penalty being soft rather than absolute is the whole point. Marking those
+// tiles impassable looks equivalent but isn't: units here stand less than a tile
+// apart, so a queue of them turns into a solid wall with no route through, paths
+// fail outright, and units judder against the blockage — worse than the problem
+// it set out to fix. A cost leaves every route that existed before available as
+// a last resort.
+const OCCUPIED_TILE_COST = 6;
+
+export function findPath(grid, sx, sy, gx, gy, maxNodes = 2000, occupied = null) {
   if (!grid.isWalkable(gx, gy)) {
     // Target blocked (e.g. attacking a building) — path to nearest walkable neighbor instead.
     const alt = nearestWalkableNeighbor(grid, gx, gy, sx, sy);
@@ -94,7 +107,10 @@ export function findPath(grid, sx, sy, gx, gy, maxNodes = 2000) {
       }
       const nKey = key(nx, ny);
       if (closed.has(nKey)) continue;
-      const tentative = gScore.get(curKey) + cost;
+      // Free on the tile the unit is standing on: it is never blocked by itself
+      // and must always be able to step off wherever it currently stands.
+      const crowded = occupied && !(nx === sx && ny === sy) && occupied.has(`${nx},${ny}`);
+      const tentative = gScore.get(curKey) + cost + (crowded ? OCCUPIED_TILE_COST : 0);
       if (tentative < (gScore.get(nKey) ?? Infinity)) {
         gScore.set(nKey, tentative);
         cameFrom.set(nKey, cur);
@@ -179,15 +195,19 @@ export class PathRequestQueue {
     this.queue = [];
   }
 
-  request(sx, sy, gx, gy, onDone) {
-    this.queue.push({ sx, sy, gx, gy, onDone });
+  // `avoidCrowds` opts this request into the routing-around behaviour described
+  // on findPath.
+  request(sx, sy, gx, gy, onDone, avoidCrowds = false) {
+    this.queue.push({ sx, sy, gx, gy, onDone, avoidCrowds });
   }
 
-  drain() {
+  // `occupied` (a Set of "x,y" tile keys for stationary units) is applied only to
+  // requests that asked for it — see moveUnitTo.
+  drain(occupied = null) {
     let n = 0;
     while (this.queue.length > 0 && n < this.budgetPerTick) {
       const req = this.queue.shift();
-      const path = findPath(this.grid, req.sx, req.sy, req.gx, req.gy);
+      const path = findPath(this.grid, req.sx, req.sy, req.gx, req.gy, undefined, req.avoidCrowds ? occupied : null);
       req.onDone(path);
       n++;
     }

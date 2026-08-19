@@ -25,7 +25,14 @@ const HARVEST_RING_RADIUS = 1.5;
 // A straight line's positions are index*spacing apart, so unlike any ring
 // arrangement, two positions can never end up coincidentally close —
 // spacing between them only ever grows with index, never shrinks.
-const LINE_START_DISTANCE = 2.0;
+// Must clear HARVEST_RING_RADIUS by at least one unit diameter (0.75): the
+// harvest slot and the first queue spot are placed on independent angles, so
+// when those angles happen to line up the two workers sit exactly
+// LINE_START_DISTANCE - HARVEST_RING_RADIUS apart. At the old 2.0 that gap was
+// 0.5 — closer than the sprites are wide, i.e. the harvester and the worker
+// first in line drawn on top of each other, depending purely on where the
+// node sat relative to the Townhall.
+const LINE_START_DISTANCE = 2.4;
 const LINE_SPACING = 0.9;
 
 // Finite harvestable node with a max concurrent-harvester slot count —
@@ -65,3 +72,34 @@ export function queueLinePoint(node, index) {
   const dist = LINE_START_DISTANCE + index * LINE_SPACING;
   return { x: node.x + Math.cos(node.queueLineAngle) * dist, y: node.y + Math.sin(node.queueLineAngle) * dist };
 }
+
+// How far to the side the approach lane sits. A queue is a wall: a worker
+// heading for the back of it from the Townhall side would otherwise walk the
+// entire length of the line and straight through everybody already standing in
+// it. Checked geometrically against the real map layout, no straight-line queue
+// angle avoids that — the best any angle manages is 0.44 tiles of clearance,
+// less than the 0.75 a worker sprite is wide — so instead of crossing the line,
+// arrivals walk a lane alongside it and step in sideways at the end. 1.8 is the
+// smallest offset that keeps both legs of that trip clear of every occupied
+// spot by more than a full worker width (0.86 measured).
+const QUEUE_LANE_OFFSET = 1.8;
+
+// The staging point beside line position `index`, on the `side` (+1/-1) flank.
+export function queueLanePoint(node, index, side) {
+  const spot = queueLinePoint(node, index);
+  const perp = node.queueLineAngle + Math.PI / 2;
+  return { x: spot.x + Math.cos(perp) * QUEUE_LANE_OFFSET * side, y: spot.y + Math.sin(perp) * QUEUE_LANE_OFFSET * side };
+}
+
+// Position of (x,y) in the queue's own frame: `along` measures out from the node
+// down the line, `lateral` measures off to its side. Used to tell a worker
+// already standing in the line (which should just shuffle forward in convoy)
+// from one still on its way there (which needs the lane).
+export function queueLineCoords(node, x, y) {
+  const ca = Math.cos(node.queueLineAngle), sa = Math.sin(node.queueLineAngle);
+  const dx = x - node.x, dy = y - node.y;
+  return { along: dx * ca + dy * sa, lateral: -dx * sa + dy * ca };
+}
+
+// Slack allowed before a worker counts as "off the line" and takes the lane.
+export const QUEUE_LANE_TOLERANCE = 0.6;
