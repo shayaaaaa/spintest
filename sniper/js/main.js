@@ -41,5 +41,16 @@ try {
 }
 
 if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+  const hadController = !!navigator.serviceWorker.controller;
   navigator.serviceWorker.register('sw.js').catch(() => { /* offline cache unavailable here */ });
+  // When an update finishes installing, reload into it, but never in the middle of a mission.
+  let reloaded = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || reloaded) return;
+    const tryReload = () => {
+      const g = window.__game;
+      if (!g || g.state === 'menu') { reloaded = true; location.reload(); } else setTimeout(tryReload, 2000);
+    };
+    tryReload();
+  });
 }

@@ -160,30 +160,47 @@ export class Sound {
     this._tone(190, 0.1, { f1: 120, gain: gain * 0.6, type: 'triangle', pan });
   }
 
+  // A soft, breathy moan: a few pure partials (no buzzy sawtooth) pitched where phone
+  // speakers can reproduce them, a slow shallow wobble, and filtered breath noise.
   groan(pan = 0, vol = 0.3, pitch = 1) {
     if (!this.ok) return;
     const now = this.now;
-    if (now - this.lastGroan < 0.6) return;
+    if (now - this.lastGroan < 2.8) return;
     this.lastGroan = now;
     const ctx = this.ctx, t = now;
-    const dur = 0.9 + Math.random() * 0.8;
-    const osc = ctx.createOscillator(); osc.type = 'sawtooth';
-    const base = (70 + Math.random() * 40) * pitch;
-    osc.frequency.setValueAtTime(base * 1.3, t);
-    osc.frequency.linearRampToValueAtTime(base, t + dur * 0.4);
-    osc.frequency.linearRampToValueAtTime(base * 0.8, t + dur);
-    const lfo = ctx.createOscillator(); lfo.frequency.value = 6 + Math.random() * 5;
-    const lg = ctx.createGain(); lg.gain.value = base * 0.06;
-    lfo.connect(lg).connect(osc.frequency);
-    const f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 500 + Math.random() * 300; f.Q.value = 2.5;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(vol, t + 0.15);
-    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-    let node = osc.connect(f).connect(g);
-    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; node = node.connect(p); }
-    node.connect(this.master);
-    osc.start(t); lfo.start(t); osc.stop(t + dur + 0.05); lfo.stop(t + dur + 0.05);
+    const dur = 1.3 + Math.random() * 0.8;
+    const f0 = (118 + Math.random() * 34) * pitch;
+    const peak = Math.min(0.15, vol * 0.45);
+
+    const env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t);
+    env.gain.exponentialRampToValueAtTime(peak, t + 0.35);
+    env.gain.setValueAtTime(peak, t + dur * 0.55);
+    env.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    const soft = ctx.createBiquadFilter(); soft.type = 'lowpass'; soft.frequency.value = 1600; soft.Q.value = 0.5;
+    let out = soft.connect(env);
+    if (ctx.createStereoPanner) { const p = ctx.createStereoPanner(); p.pan.value = pan; out = out.connect(p); }
+    out.connect(this.master);
+
+    const wob = ctx.createOscillator(); wob.frequency.value = 2.2 + Math.random();
+    const nodes = [wob];
+    for (const [h, a] of [[1, 0.55], [2, 0.4], [3, 0.22], [4, 0.1]]) {
+      const o = ctx.createOscillator(); o.type = 'sine';
+      o.frequency.setValueAtTime(f0 * h * 1.06, t);
+      o.frequency.linearRampToValueAtTime(f0 * h, t + dur * 0.3);
+      o.frequency.linearRampToValueAtTime(f0 * h * 0.82, t + dur);
+      const wg = ctx.createGain(); wg.gain.value = f0 * h * 0.012;
+      wob.connect(wg).connect(o.frequency);
+      const ag = ctx.createGain(); ag.gain.value = a;
+      o.connect(ag).connect(soft);
+      nodes.push(o);
+    }
+    const br = ctx.createBufferSource(); br.buffer = this.noiseBuf;
+    const bf = ctx.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = 750 + Math.random() * 250; bf.Q.value = 0.9;
+    const bg = ctx.createGain(); bg.gain.value = 0.28;
+    br.connect(bf).connect(bg).connect(soft);
+    for (const n of nodes) { n.start(t); n.stop(t + dur + 0.05); }
+    br.start(t, Math.random() * 0.5); br.stop(t + dur + 0.05);
   }
 
   explosion(vol = 1) {

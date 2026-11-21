@@ -1,5 +1,5 @@
 // Offline cache: every file the game needs is stored on first visit, then served from the cache.
-const CACHE = 'deadeye-outpost-v1';
+const CACHE = 'deadeye-outpost-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -23,7 +23,8 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS)).then(() => self.skipWaiting()));
+  // cache: 'reload' skips the browser's HTTP cache so an update always gets fresh files
+  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS.map(u => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', e => {

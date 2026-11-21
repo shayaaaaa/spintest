@@ -36,7 +36,7 @@ class Zombie {
     this.heading = Math.atan2(this.target.x - x, this.target.z - z);
     this.root.rotation.y = this.heading;
     this.phase = Math.random() * 10;
-    this.groanT = rand(1, 8);
+    this.groanT = rand(4, 16);
     this.attackT = rand(0.2, 1);
     this.react = 0;
     this.helmet = !!this.m.helmet;
@@ -134,7 +134,7 @@ class Zombie {
       return;
     }
     this.groanT -= dt;
-    if (this.groanT <= 0) { this.groanT = rand(4, 12); g.groanAt(this); }
+    if (this.groanT <= 0) { this.groanT = rand(10, 24); if (!this.ambient) g.groanAt(this); }
     if (this.react > 0) this.react = Math.max(0, this.react - dt * 3);
 
     if (this.state === 'walk' || this.state === 'chase') {
@@ -715,7 +715,7 @@ export class Game {
       this.boss = b;
       this.ui.banner(`THE ${bname.toUpperCase()}`, 'Aim for the head');
       this.audio.horn();
-      this.later(0.4, () => this.audio.groan(this.panOf(b.pos), 0.6, 0.55));
+      this.later(0.4, () => this.audio.groan(this.panOf(b.pos), 0.6, 0.75));
       return;
     }
     this.spawnT -= dt;
@@ -735,7 +735,7 @@ export class Game {
   groanAt(z) {
     const d = Math.hypot(z.pos.x, z.pos.z);
     const vol = (z.def.boss ? 0.6 : 0.3) * clamp(1 - d / 130, 0.05, 1);
-    this.audio.groan(this.panOf(z.pos), vol, z.def.boss ? 0.55 : z.def.lean ? 1.3 : 1);
+    this.audio.groan(this.panOf(z.pos), vol, z.def.boss ? 0.75 : z.def.lean ? 1.25 : 1);
   }
 
   damageWall(amount, z) {
@@ -881,9 +881,7 @@ export class Game {
     this.camera.updateMatrixWorld();
     const origin = this.camera.getWorldPosition(new THREE.Vector3());
     const dir = new THREE.Vector3(0, 0, -1);
-    const spread = this.scopeShown ? 0.0004 : 0.03;
-    dir.x += (Math.random() - 0.5) * 2 * spread; dir.y += (Math.random() - 0.5) * 2 * spread;
-    dir.normalize().applyQuaternion(this.camera.quaternion);
+    dir.applyQuaternion(this.camera.quaternion);
     this.recoil += (this.scopeShown ? 0.028 : 0.05) * r.recoil;
     this.recoilYaw += (Math.random() - 0.5) * 0.012 * r.recoil;
     this.shake += 0.35 * r.recoil;
