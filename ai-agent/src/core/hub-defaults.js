@@ -176,10 +176,16 @@ description: Plan and run fine-tuning, training from scratch, or reinforcement l
 2. Dataset: use the Dataset tool. Chat SFT rows are \`{"messages":[{"role":"user","content":…},{"role":"assistant","content":…}]}\`.
    DPO rows: \`{"prompt":…, "chosen":…, "rejected":…}\`. GRPO rows: \`{"prompt":…, "answer":…}\` plus a reward function.
    Aim for 200–2,000 good examples for LoRA; quality beats quantity.
-3. Pick a base model that fits (Studio → Estimate). On this phone: LoRA up to ~1.5B is comfortable, QLoRA to ~4B, more is slow.
-4. Defaults that work: LoRA rank 16, alpha 32, lr 2e-4, 1–3 epochs, seq length 512–1024, batch 1 with grad accumulation 8.
-5. Start the run with the Train tool, then check the loss curve. Loss that falls then flattens is good; rising validation loss means overfitting.
-6. Test the result in Chat with the adapter selected. For bigger jobs, use Offload (Colab, HF Jobs, RunPod) from the Studio.
+3. Pick a base model: it must be a trainable (safetensors) model from Studio → Models → For training (Models tool can
+   list them). Call the Train tool with action "estimate" first: it reports memory against this phone's budget and
+   time per step. On this phone LoRA up to ~1.5B is comfortable, QLoRA (tuning "qlora") to ~3B with short sequences.
+4. Defaults that work: LoRA rank 16, alpha 32, lr 2e-4 (full fine-tune 2e-5, from scratch 1e-3), 1–3 epochs,
+   sequence length 512–1024, batch 8 (sequences per optimizer step; gradients are accumulated, so memory stays flat).
+5. Start with the Train tool (action "start"). It runs in the background: check with action "status". Loss that falls
+   then flattens is good; rising validation loss means overfitting (fewer epochs or more data).
+6. When it finishes, try the model on the run's page (Studio → Train → the run → Try it), then export: a GGUF for fast
+   chat (it appears in Studio → Models and can be chosen for Chat/Agent), a merged model to keep training, or a LoRA
+   adapter (PEFT) for use on a PC. For bigger jobs, use Offload (Colab, HF Jobs, RunPod/Modal, a companion PC).
 `,
 
   '/agents/explorer.md': `---

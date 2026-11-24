@@ -63,7 +63,9 @@ export const Train = {
     method: { type: 'string', enum: ['sft', 'lora', 'qlora', 'pretrain', 'dpo', 'grpo'] },
     base: { type: 'string', description: 'Model ref (local:llm/…) of a safetensors model, or "scratch"' },
     dataset: { type: 'string' }, name: { type: 'string' },
-    epochs: { type: 'number' }, lr: { type: 'number' }, rank: { type: 'number' }, alpha: { type: 'number' }, seqLen: { type: 'number' }, batch: { type: 'number' }, gradAccum: { type: 'number' },
+    tuning: { type: 'string', enum: ['lora', 'qlora', 'full'], description: 'Default lora. qlora = 4-bit base weights (less memory).' },
+    epochs: { type: 'number' }, maxSteps: { type: 'number' }, lr: { type: 'number' }, rank: { type: 'number' }, alpha: { type: 'number' }, seqLen: { type: 'number' }, batch: { type: 'number' }, gradAccum: { type: 'number' },
+    beta: { type: 'number', description: 'DPO strength or GRPO KL weight' }, group: { type: 'number', description: 'GRPO completions per prompt' }, maxNew: { type: 'number', description: 'GRPO max completion tokens' },
     size: { type: 'string', description: 'For pretrain from scratch: nano|micro|small|base' }, reward: { type: 'string', description: 'GRPO reward: exact|contains|regex|numeric|length or JS code' },
     run: { type: 'string' },
   }, required: ['action'] },
@@ -73,7 +75,7 @@ export const Train = {
   async run(i) {
     const jobs = await import('../../forge/jobs.js');
     if (i.action === 'estimate') return JSON.stringify(await jobs.estimate(i), null, 2);
-    if (i.action === 'start') { const r = await jobs.startRun(i); return `Started run ${r.id} (${r.method}). Watch it in Studio → Train. Checkpoints save to ${r.dir}.`; }
+    if (i.action === 'start') { const r = await jobs.startRun(i); return `Started run ${r.id} (${r.method}). It trains in the background; watch it in Studio → Train or check with action "status". Checkpoints save to ${r.dir}. Exports (adapter, merged model, GGUF) are in the run's page.`; }
     if (i.action === 'status') return JSON.stringify(await jobs.status(i.run), null, 2);
     if (i.action === 'stop') { await jobs.stopRun(i.run); return 'Stopped (checkpoint saved).'; }
   },

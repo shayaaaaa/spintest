@@ -115,16 +115,21 @@ if (want('sft')) {
       catch (e) { res[k] = 'error: ' + e.message; }
       await reg.unloadLocal();
     }
-    const m = reg.modelsStore.get().local.find(m => m.id === 'secret-gguf');
-    try { const r = await reg.chat(m.ref, { messages: [{ role: 'user', content: 'What is the capital of France?' }], maxTokens: 16, temperature: 0 }); res.france = t(r); } catch (e) { res.france = 'error: ' + e.message; }
-    await reg.unloadLocal();
+    // Export fidelity: llama.cpp running the f16 GGUF should answer an unrelated prompt like Forge running the merged model.
+    for (const [k, id] of [['franceForge', 'secret-merged'], ['franceGguf', 'secret-f16-gguf']]) {
+      const m = reg.modelsStore.get().local.find(m => m.id === id);
+      if (m.engine === 'gguf') m.gpu = false;
+      try { const r = await reg.chat(m.ref, { messages: [{ role: 'user', content: 'What is the capital of France?' }], maxTokens: 12, temperature: 0 }); res[k] = t(r); } catch (e) { res[k] = 'error: ' + e.message; }
+      await reg.unloadLocal();
+    }
     return res;
   });
   log('merged answers:', JSON.stringify(merged));
   check('merged Forge model knows the secret', /pineapple/i.test(merged.forge), merged.forge);
   check('GGUF q8_0 (llama.cpp) knows the secret', /pineapple/i.test(merged.ggufq8), merged.ggufq8);
   check('GGUF f16 (llama.cpp) knows the secret', /pineapple/i.test(merged.gguff16), merged.gguff16);
-  check('GGUF keeps general knowledge', /paris/i.test(merged.france), merged.france);
+  const words = (x) => String(x).toLowerCase().split(/\s+/).slice(0, 5).join(' ');
+  check('GGUF in llama.cpp matches Forge on an unrelated prompt', words(merged.franceForge) === words(merged.franceGguf) && !/error/.test(merged.franceGguf), `${merged.franceForge} | ${merged.franceGguf}`);
 }
 
 if (want('dpo')) {

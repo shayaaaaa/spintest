@@ -13,6 +13,7 @@ import { fmtBytes, download } from '../../core/util.js';
 import * as vfs from '../../core/vfs.js';
 import { bus } from '../../core/bus.js';
 import { systemVoices, speak } from '../../models/speech.js';
+import { linuxStore } from '../../runtimes/linux.js';
 
 const SECTIONS = [
   { id: 'models', label: 'Models & keys', icon: 'cpu' },
@@ -222,11 +223,46 @@ function Storage() {
     <div class="card"><div class="card-title">Offline engines</div>
       <div class="small dim">The app itself (${manifest ? fmtBytes(manifest.bytes.core) : '…'}) is always cached. Engines (${manifest ? fmtBytes(manifest.bytes.engines) : '…'}: llama.cpp, WebLLM, ONNX, office, PDF, Linux) are cached when first used, or all at once here.</div>
       ${cache && !cache.finished ? html`<div style="margin-top:10px"><${Progress} value=${cache.done} max=${cache.total} /></div>` : html`<button class="btn" style="margin-top:10px" onClick=${cacheEngines}><${Icon} name="download" />${cache?.finished ? 'Refresh offline engines' : 'Make everything available offline'}</button>`}</div>
+    <${Runtimes} />
     <div class="card"><div class="card-title">Back up</div>
       <div class="small dim">Export memory, skills, tools, agents, knowledge, datasets, chats, settings (without API keys) and projects as a .zip.</div>
       <div class="row" style="margin-top:10px"><button class="btn" onClick=${exportHub}><${Icon} name="download" />Export Hub</button><button class="btn" onClick=${importHub}><${Icon} name="upload" />Import</button></div></div>
     <div class="card"><div class="card-title" style="color:var(--err)">Danger zone</div>
       <button class="btn danger" onClick=${async () => { if (await confirmDialog({ title: 'Delete everything?', message: 'This erases the whole Hub on this phone: models, memory, projects, settings and keys.', ok: 'Erase', danger: true })) { await vfs.rm('/', {}).catch(async () => { for (const e of await vfs.list('/')) await vfs.rm(e.path); }); location.reload(); } }}><${Icon} name="trash" />Erase Hub</button></div>`;
+}
+
+// Downloadable runtimes kept in Hub/runtimes (each is fetched once, then works offline).
+const RUNTIMES = [
+  { id: 'pyodide', name: 'Python (Pyodide)', blurb: 'Python 3 with numpy, pandas, matplotlib… for the Python tool and terminal.', size: '~30 MB',
+    install: async () => (await import('../../runtimes/python.js')).install() },
+  { id: 'ffmpeg', name: 'ffmpeg', blurb: 'Audio/video conversion and editing for the Media tool.', size: '~32 MB',
+    install: async () => (await import('../../agent/tools/media.js')).ensureFfmpeg() },
+  { id: 'linux', name: 'Linux VM (Alpine)', blurb: 'A real Linux shell in the terminal: type linux, or linux <command>.', size: '~50 MB',
+    install: async () => (await import('../../runtimes/linux.js')).install() },
+];
+function Runtimes() {
+  const [sizes, setSizes] = useState({});
+  const [busy, setBusy] = useState(null);
+  const lin = useStore(linuxStore);
+  const net = useStore(settings, s => !!s.linux?.network);
+  const load = async () => { const o = {}; for (const r of RUNTIMES) o[r.id] = await vfs.du('/runtimes/' + r.id).catch(() => ({ bytes: 0, files: 0 })); setSizes(o); };
+  useEffect(() => { load(); }, []);
+  const act = async (r, what) => {
+    setBusy(r.id);
+    try {
+      if (what === 'install') { await r.install(); toast(`${r.name} is ready offline`, 'ok'); }
+      else { if (r.id === 'linux') await (await import('../../runtimes/linux.js')).shutdown(); await vfs.rm('/runtimes/' + r.id); toast(`${r.name} removed`); }
+    } catch (e) { toast(String(e.message || e), 'err', 7000); }
+    setBusy(null); load();
+  };
+  return html`<div class="card"><div class="card-title">Runtimes</div>
+    ${RUNTIMES.map(r => { const have = sizes[r.id]?.bytes > 0; return html`<div class="row" style="padding:8px 0;border-top:1px solid var(--border);align-items:flex-start">
+      <div class="grow" style="min-width:0"><div style="font-weight:600">${r.name}${have ? html` <span class="tag ok">${fmtBytes(sizes[r.id].bytes)}</span>` : ''}</div>
+        <div class="small dim">${r.blurb}${have ? '' : ` Download ${r.size}.`}</div>
+        ${r.id === 'linux' && (lin.state === 'downloading' || lin.state === 'booting') && html`<div style="margin-top:6px"><${Progress} value=${lin.progress || 0} indet=${lin.state === 'booting'} /><div class="small dim">${lin.text}</div></div>`}
+        ${r.id === 'linux' && have && html`<div style="margin-top:6px"><${Toggle} on=${net} onChange=${v => setSetting('linux.network', v)} label="Network inside the VM (experimental, HTTP via the browser)" /></div>`}</div>
+      ${busy === r.id ? html`<div class="spinner"></div>` : have ? html`<button class="btn sm" onClick=${() => act(r, 'remove')}>Remove</button>` : html`<button class="btn sm primary" onClick=${() => act(r, 'install')}>Install</button>`}
+    </div>`; })}</div>`;
 }
 
 function About() {

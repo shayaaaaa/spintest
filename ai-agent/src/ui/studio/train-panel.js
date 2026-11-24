@@ -179,7 +179,7 @@ function RunDetail({ id, back }) {
   };
   const progress = run.total ? (last?.step ?? run.step) / run.total : 0;
   return html`<div class="page">
-    <div class="run-head"><button class="ibtn" onClick=${back} aria-label="Back"><${Icon} name="chevronLeft" /></button>
+    <div class="run-head" style="flex-wrap:nowrap"><button class="ibtn" onClick=${back} aria-label="Back"><${Icon} name="chevronLeft" /></button>
       <div class="grow" style="min-width:0"><div style="font-weight:700" class="ellipsis">${run.name}</div>
         <div class="small dim">${METHODS[run.method]?.label}${run.method !== 'scratch' ? ' · ' + run.tuning.toUpperCase() : ''} · ${run.baseName} · ${run.dataset}</div></div>
       <span class=${'tag ' + (STATE_TAG[run.state] || '')}>${run.state}</span>
@@ -203,7 +203,7 @@ function RunDetail({ id, back }) {
         ${l.evals.length > 0 && html`<div class="stat"><div class="stat-k">Val loss</div><div class="stat-v">${l.evals.at(-1).val_loss.toFixed(4)}</div></div>`}
         <div class="stat"><div class="stat-k">Tokens/s</div><div class="stat-v">${last?.tps ? Math.round(last.tps) : '—'}</div></div>
         ${running && last?.eta != null && html`<div class="stat"><div class="stat-k">Left</div><div class="stat-v">${fmtDuration(last.eta)}</div></div>`}
-        <div class="stat"><div class="stat-k">LR</div><div class="stat-v">${last?.lr ? last.lr.toExponential(1) : '—'}</div></div>
+        <div class="stat"><div class="stat-k">LR</div><div class="stat-v">${last?.lr != null ? last.lr.toExponential(1) : '—'}</div></div>
       </div>
       ${running && html`<div class="help" style="margin-top:8px">Keep the app open and the screen on: iOS pauses web apps in the background. If it's interrupted, resume from the last checkpoint.</div>`}
     </div>

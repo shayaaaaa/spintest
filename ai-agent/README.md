@@ -104,7 +104,8 @@ node release.mjs                  # after ANY change: updates asset-manifest.jso
 node ../tests/serve.mjs 8080      # http://localhost:8080/ai-agent/
 ```
 
-Tests use Playwright's Chromium with a software WebGPU adapter (`ai-agent/tests/`):
+Tests use Playwright's Chromium with a software WebGPU adapter (`ai-agent/tests/`). `node tests/run.mjs` runs the fast
+suites; `--all` adds the slow ones that download real models (about an hour on a CPU-emulated GPU):
 
 | Test | Covers |
 | --- | --- |

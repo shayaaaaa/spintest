@@ -574,23 +574,42 @@ export class LlamaModel {
 export function sample(logits, { temperature = 0.7, topP = 0.9, topK = 50, repetitionPenalty = 1, seen } = {}) {
   const V = logits.length;
   if (repetitionPenalty !== 1 && seen) for (const id of seen) logits[id] = logits[id] > 0 ? logits[id] / repetitionPenalty : logits[id] * repetitionPenalty;
-  if (!temperature || temperature <= 0.01) { let b = 0; for (let i = 1; i < V; i++) if (logits[i] > logits[b]) b = i; return b; }
-  // top-k
-  const k = Math.min(topK || V, V);
-  const idx = new Int32Array(k).fill(-1), val = new Float32Array(k).fill(-Infinity);
-  for (let i = 0; i < V; i++) {
-    const v = logits[i];
-    if (v <= val[k - 1]) continue;
-    let j = k - 1; while (j > 0 && val[j - 1] < v) { val[j] = val[j - 1]; idx[j] = idx[j - 1]; j--; }
-    val[j] = v; idx[j] = i;
+  let best = 0; for (let i = 1; i < V; i++) if (logits[i] > logits[best]) best = i;
+  if (!temperature || temperature <= 0.01) return best;
+  const m = logits[best], invT = 1 / temperature;
+  const k = topK > 0 ? Math.min(topK, V) : V;
+  // Plain sampling from the full distribution: O(V), no sorting.
+  if (k === V && (!topP || topP >= 1)) {
+    let z = 0; const p = new Float64Array(V);
+    for (let i = 0; i < V; i++) { p[i] = Math.exp((logits[i] - m) * invT); z += p[i]; }
+    let r = Math.random() * z;
+    for (let i = 0; i < V; i++) { r -= p[i]; if (r <= 0) return i; }
+    return best;
   }
-  const m = val[0];
-  const p = Array.from(val, v => Math.exp((v - m) / temperature));
-  const s = p.reduce((a, b) => a + b, 0);
-  let acc = 0, cut = k;
-  for (let i = 0; i < k; i++) { acc += p[i] / s; if (acc >= topP) { cut = i + 1; break; } }
-  const s2 = p.slice(0, cut).reduce((a, b) => a + b, 0);
-  let r = Math.random() * s2;
-  for (let i = 0; i < cut; i++) { r -= p[i]; if (r <= 0) return idx[i]; }
+  // Candidate set: top-k by partial selection (small k) or a full sort (top-p over the whole vocabulary).
+  let idx;
+  if (k <= 512) {
+    idx = new Int32Array(k).fill(-1); const val = new Float32Array(k).fill(-Infinity);
+    for (let i = 0; i < V; i++) {
+      const v = logits[i];
+      if (v <= val[k - 1]) continue;
+      let j = k - 1; while (j > 0 && val[j - 1] < v) { val[j] = val[j - 1]; idx[j] = idx[j - 1]; j--; }
+      val[j] = v; idx[j] = i;
+    }
+  } else {
+    // Prune with a cheap threshold first (tokens 30 nats below the max are ~0 after softmax).
+    const cut = m - 30 * temperature;
+    const cand = []; for (let i = 0; i < V; i++) if (logits[i] >= cut) cand.push(i);
+    cand.sort((a, b) => logits[b] - logits[a]);
+    idx = Int32Array.from(cand.slice(0, k));
+  }
+  const n = idx.length;
+  const p = new Float64Array(n);
+  let z = 0; for (let i = 0; i < n; i++) { p[i] = idx[i] < 0 ? 0 : Math.exp((logits[idx[i]] - m) * invT); z += p[i]; }
+  let acc = 0, cutN = n;
+  if (topP && topP < 1) for (let i = 0; i < n; i++) { acc += p[i] / z; if (acc >= topP) { cutN = i + 1; break; } }
+  let z2 = 0; for (let i = 0; i < cutN; i++) z2 += p[i];
+  let r = Math.random() * z2;
+  for (let i = 0; i < cutN; i++) { r -= p[i]; if (r <= 0) return idx[i]; }
   return idx[0];
 }

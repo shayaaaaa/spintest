@@ -43,7 +43,7 @@ const FF_DIR = '/runtimes/ffmpeg';
 let ffWorker = null, ffSeq = 0;
 const ffWaits = new Map();
 
-async function ensureFfmpeg(onProgress) {
+export async function ensureFfmpeg(onProgress) {
   const files = ['ffmpeg-core.js', 'ffmpeg-core.wasm'];
   for (const f of files) {
     if (await vfs.exists(`${FF_DIR}/${f}`)) continue;

@@ -4,7 +4,7 @@ import * as vfs from '../core/vfs.js';
 import { createStore } from '../core/store.js';
 import { uid } from '../core/util.js';
 import { settings, setSetting } from '../core/settings.js';
-import { memoryBudgetGB } from '../core/platform.js';
+import { memoryBudgetGB, env } from '../core/platform.js';
 import { rpc, forgeEvents } from './client.js';
 
 const ROOT = '/training/runs';
@@ -128,7 +128,8 @@ export async function estimate(i) {
   const activations = 4 * (p.L * T * p.D + T * (6 * p.D + 3 * p.qd + 4 * p.kvd + 5 * p.I) + 2 * p.H * T * T + rows * p.V + T * p.D);
   const kv = 4 * p.L * 2 * Math.min(T + 256, 4096) * p.kvd; // KV cache for samples / GRPO rollouts
   const total = weights + optimizer + activations + kv;
-  const budget = settings.get().forge?.memoryGB || memoryBudgetGB();
+  // A web app on iOS gets a slice of RAM before the system ends it: be conservative there (override: forge.memoryGB).
+  const budget = settings.get().forge?.memoryGB || (env.get().ios ? Math.min(7, memoryBudgetGB()) : memoryBudgetGB());
   const flopsPerToken = (tuning === 'full' ? 8 : 6) * (p.lin) + 6 * p.V * p.D;
   const batch = (i.batch || (method.method === 'grpo' ? 1 : 8)) * (i.gradAccum || 1);
   const gflops = settings.get().forge?.gflops || 400;
