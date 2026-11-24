@@ -19,7 +19,7 @@ function walk(dir, out = []) {
 const CORE_VENDOR = new Set(['vendor/preact.mjs', 'vendor/codemirror.mjs', 'vendor/markdown.mjs', 'vendor/xterm.mjs', 'vendor/xterm.css']);
 const core = [];
 const engines = [];
-for (const f of [...walk(path.join(app, 'src')), ...walk(path.join(app, 'icons')), path.join(app, 'manifest.webmanifest')]) core.push(rel(f));
+for (const f of [...walk(path.join(app, 'src')), ...walk(path.join(app, 'icons')), path.join(app, 'manifest.webmanifest'), path.join(app, 'docs', 'proxy-worker.js')]) core.push(rel(f));
 for (const f of walk(path.join(app, 'vendor'))) {
   const r = rel(f);
   if (r.endsWith('.map')) continue;

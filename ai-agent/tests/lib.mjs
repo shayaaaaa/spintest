@@ -17,8 +17,8 @@ export async function setup({ port = 8091 } = {}) {
   return { browser, base: `http://localhost:${port}/ai-agent/` };
 }
 
-export async function openApp(browser, base, { size = DUO.folded, hash = '', scale = 1, reloadForIsolation = true } = {}) {
-  const ctx = await browser.newContext({ viewport: size, deviceScaleFactor: scale, hasTouch: true, isMobile: false, userAgent: undefined });
+export async function openApp(browser, base, { size = DUO.folded, hash = '', scale = 1, reloadForIsolation = true, colorScheme = 'dark', ctx: existing } = {}) {
+  const ctx = existing || await browser.newContext({ viewport: size, deviceScaleFactor: scale, hasTouch: true, isMobile: false, colorScheme });
   const page = await ctx.newPage();
   const logs = [];
   page.on('console', m => logs.push(`[${m.type()}] ${m.text()}`));

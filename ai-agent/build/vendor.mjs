@@ -66,6 +66,7 @@ export { java } from '@codemirror/lang-java';
 export { sql } from '@codemirror/lang-sql';
 export { xml } from '@codemirror/lang-xml';
 export { yaml } from '@codemirror/lang-yaml';
+export { tags } from '@lezer/highlight';
 `);
 
 // Markdown rendering: marked + highlight.js + DOMPurify
