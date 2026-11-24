@@ -255,13 +255,24 @@ function Runtimes() {
     } catch (e) { toast(String(e.message || e), 'err', 7000); }
     setBusy(null); load();
   };
+  const importIso = () => {
+    const inp = Object.assign(document.createElement('input'), { type: 'file', accept: '.iso,application/x-iso9660-image' });
+    inp.onchange = async () => {
+      const f = inp.files[0]; if (!f) return;
+      setBusy('linux');
+      try { await (await import('../../runtimes/linux.js')).importISO(f); toast('Linux image imported', 'ok'); } catch (e) { toast(String(e.message || e), 'err', 7000); }
+      setBusy(null); load();
+    };
+    inp.click();
+  };
   return html`<div class="card"><div class="card-title">Runtimes</div>
     ${RUNTIMES.map(r => { const have = sizes[r.id]?.bytes > 0; return html`<div class="row" style="padding:8px 0;border-top:1px solid var(--border);align-items:flex-start">
       <div class="grow" style="min-width:0"><div style="font-weight:600">${r.name}${have ? html` <span class="tag ok">${fmtBytes(sizes[r.id].bytes)}</span>` : ''}</div>
         <div class="small dim">${r.blurb}${have ? '' : ` Download ${r.size}.`}</div>
         ${r.id === 'linux' && (lin.state === 'downloading' || lin.state === 'booting') && html`<div style="margin-top:6px"><${Progress} value=${lin.progress || 0} indet=${lin.state === 'booting'} /><div class="small dim">${lin.text}</div></div>`}
         ${r.id === 'linux' && have && html`<div style="margin-top:6px"><${Toggle} on=${net} onChange=${v => setSetting('linux.network', v)} label="Network inside the VM (experimental, HTTP via the browser)" /></div>`}</div>
-      ${busy === r.id ? html`<div class="spinner"></div>` : have ? html`<button class="btn sm" onClick=${() => act(r, 'remove')}>Remove</button>` : html`<button class="btn sm primary" onClick=${() => act(r, 'install')}>Install</button>`}
+      ${busy === r.id ? html`<div class="spinner"></div>` : have ? html`<button class="btn sm" onClick=${() => act(r, 'remove')}>Remove</button>` : html`<div class="col" style="gap:6px;align-items:stretch"><button class="btn sm primary" onClick=${() => act(r, 'install')}>Install</button>
+        ${r.id === 'linux' && html`<button class="btn sm" onClick=${importIso}>Import ISO</button>`}</div>`}
     </div>`; })}</div>`;
 }
 

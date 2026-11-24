@@ -61,6 +61,7 @@ if (!only || only === 'linux') {
     await vfs.write('/workspace/vmfile.txt', 'from the hub ✓\n');
     out.put = await run('--put vmfile.txt /root/x.txt');
     out.cat = await run('cat /root/x.txt');
+    out.utf8 = await run('echo "héllo ✓ 世界"');
     out.mk = await run('echo made-in-vm > /root/y.txt');
     out.get = await run('--get /root/y.txt vm-out.txt');
     out.got = await vfs.readText('/workspace/vm-out.txt').catch(e => 'ERR ' + e.message);
@@ -79,9 +80,10 @@ if (!only || only === 'linux') {
   check('linux: exit status', r.fail.code === 1);
   check('linux: multi-line output', r.multi.s.trim() === 'n1\nn2\nn3', r.multi.s);
   check('linux: --put copies a Hub file in', r.put.code === 0 && r.cat.s.trim() === 'from the hub ✓', r.cat.s);
+  check('linux: UTF-8 in and out of the VM', r.utf8.s.trim() === 'héllo ✓ 世界', r.utf8.s);
   check('linux: --get copies a VM file out', r.got.trim() === 'made-in-vm', r.got);
   check('linux: shell state persists between commands', r.cdPersist === '/etc|/etc', r.cdPersist);
-  check('linux: snapshot saved and restored', r.snapshot && r.again.s.trim() === 'restored', `${r.again.s} ${r.restoreMs}`);
+  check('linux: snapshot saved and restored', r.snapshot && /(^|\n)restored$/.test(r.again.s.trim()) && r.restoreMs < 30000, `${r.again.s} ${(r.restoreMs / 1000).toFixed(1)}s`);
 }
 
 const errs = logs.filter(l => /pageerror/.test(l));

@@ -17,9 +17,12 @@ panes and a single pane.
 
 ## Install on your iPhone
 
-1. **Publish it** (one time). On GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*. Pick the
-   branch that contains `ai-agent/` and the `/ (root)` folder. After a minute it's live at
-   `https://<your-user>.github.io/<repo>/ai-agent/`.
+1. **Publish it** (one time). On GitHub: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. The
+   included workflow (`.github/workflows/pages.yml`) deploys the repository on every push to `main`. It also publishes
+   the checksum-verified Alpine Linux image next to the app, so the Linux VM can download it (Alpine's own mirror
+   blocks downloads from web pages). After a minute it's live at `https://<your-user>.github.io/<repo>/ai-agent/`.
+   *Deploy from a branch* also works. Everything except the automatic Linux download does; get the image through
+   your proxy (Settings → Web) or with Settings → Storage & offline → Runtimes → *Import ISO* instead.
 2. On the iPhone, open that address in **Safari**.
 3. Tap **Share → Add to Home Screen**. Launch it from the Home Screen icon: it opens full screen and works offline.
 4. First launch:

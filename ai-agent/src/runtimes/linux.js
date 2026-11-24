@@ -17,16 +17,35 @@ const setState = (patch) => linuxStore.set(patch);
 
 export async function isInstalled() { return !!(await vfs.readJSON(`${DIR}/manifest.json`, null))?.iso; }
 
+// Where the ISO can come from, in order: a same-origin copy published with the app (GitHub Pages workflow), the
+// user's CORS proxy (Settings → Web), then the Alpine mirror directly (it sends no CORS headers, so browsers block it).
+async function fetchVia(url) {
+  const { proxyUrl } = await import('../core/net.js');
+  const proxy = proxyUrl();
+  const tries = [...(proxy ? [`${proxy}/?url=${encodeURIComponent(url)}`] : []), url];
+  let last;
+  for (const u of tries) { try { const r = await fetch(u); if (r.ok) return r; last = new Error(`HTTP ${r.status}`); } catch (e) { last = e; } }
+  throw last;
+}
+async function locateISO() {
+  try {
+    const meta = await (await fetch(new URL('../../runtimes/alpine.json', import.meta.url), { cache: 'no-store' })).json();
+    if (meta?.file) return { url: new URL('../../runtimes/alpine.iso', import.meta.url).href, ...meta, sameOrigin: true };
+  } catch {}
+  let yaml;
+  try { yaml = await (await fetchVia(MIRROR + 'latest-releases.yaml')).text(); }
+  catch { throw new Error('Could not reach the Alpine Linux mirror from the browser (it blocks cross-origin downloads). Options: deploy the app with the included GitHub Pages workflow (it publishes the image next to the app), set your proxy in Settings → Web, or download alpine-virt-…-x86.iso in Safari and use Settings → Storage & offline → Runtimes → Import ISO.'); }
+  const block = yaml.split('\n-').find(b => /flavor: alpine-virt\b/.test(b));
+  const file = /\bfile: (\S+\.iso)/.exec(block || '')?.[1];
+  if (!file) throw new Error('Could not find the Alpine virt ISO on the mirror.');
+  return { url: MIRROR + file, file, sha256: /\bsha256: ([0-9a-f]{64})/.exec(block)?.[1], version: /\bversion: (\S+)/.exec(block)?.[1] };
+}
+
 export async function install(onProgress = () => {}) {
   setState({ state: 'downloading', progress: 0, text: 'Finding the latest Alpine Linux…' });
   try {
-    const yaml = await (await fetch(MIRROR + 'latest-releases.yaml')).text();
-    const block = yaml.split('\n-').find(b => /flavor: alpine-virt\b/.test(b));
-    const file = /\bfile: (\S+\.iso)/.exec(block || '')?.[1];
-    const sha = /\bsha256: ([0-9a-f]{64})/.exec(block || '')?.[1];
-    const version = /\bversion: (\S+)/.exec(block || '')?.[1];
-    if (!file) throw new Error('Could not find the Alpine virt ISO on the mirror.');
-    const r = await fetch(MIRROR + file);
+    const src = await locateISO();
+    const r = src.sameOrigin ? await fetch(src.url) : await fetchVia(src.url);
     if (!r.ok || !r.body) throw new Error(`Download failed (${r.status})`);
     const total = +r.headers.get('content-length') || 0;
     const ws = await vfs.createWriteStream(`${DIR}/alpine.iso`);
@@ -37,18 +56,36 @@ export async function install(onProgress = () => {}) {
       const { value, done } = await reader.read(); if (done) break;
       await ws.write(value); chunks.push(value); got += value.byteLength;
       const p = total ? got / total : 0;
-      setState({ progress: p, text: `Downloading ${file} (${Math.round(got / 1e6)} MB)` }); onProgress(p);
+      setState({ progress: p, text: `Downloading ${src.file} (${Math.round(got / 1e6)} MB)` }); onProgress(p);
     }
     await ws.close();
-    if (sha) {
+    if (src.sha256) {
       const buf = new Uint8Array(got); let o = 0; for (const c of chunks) { buf.set(c, o); o += c.byteLength; }
       const h = [...new Uint8Array(await crypto.subtle.digest('SHA-256', buf))].map(b => b.toString(16).padStart(2, '0')).join('');
-      if (h !== sha) { await vfs.rm(`${DIR}/alpine.iso`); throw new Error('Checksum mismatch: the download was corrupted. Try again.'); }
+      if (h !== src.sha256) { await vfs.rm(`${DIR}/alpine.iso`); throw new Error('Checksum mismatch: the download was corrupted. Try again.'); }
     }
+    const version = src.version || /alpine-virt-([\d.]+)-x86/.exec(src.file)?.[1] || null;
     await vfs.rm(`${DIR}/state.bin`, { silent: true }).catch(() => {});
-    await vfs.writeJSON(`${DIR}/manifest.json`, { iso: 'alpine.iso', file, version, sha256: sha, installed: Date.now() });
-    setState({ state: 'off', progress: 1, text: `Alpine ${version} installed`, version });
+    await vfs.writeJSON(`${DIR}/manifest.json`, { iso: 'alpine.iso', file: src.file, version, sha256: src.sha256 || null, installed: Date.now() });
+    setState({ state: 'off', progress: 1, text: `Alpine ${version || ''} installed`, version });
   } catch (e) { setState({ state: 'error', text: String(e.message || e) }); throw e; }
+}
+
+// Installs an ISO the user downloaded themselves (Files app). Checks it is an x86 ISO 9660 image.
+export async function importISO(file) {
+  const head = new Uint8Array(await file.slice(0x8001, 0x8006).arrayBuffer());
+  if (String.fromCharCode(...head) !== 'CD001') throw new Error('That file is not an ISO image.');
+  if (/aarch64|arm|x86_64/i.test(file.name)) throw new Error('Use the 32-bit x86 image (alpine-virt-…-x86.iso): the emulator runs 32-bit x86.');
+  setState({ state: 'downloading', progress: 0, text: 'Importing…' });
+  const ws = await vfs.createWriteStream(`${DIR}/alpine.iso`);
+  const reader = file.stream().getReader();
+  let got = 0;
+  for (;;) { const { value, done } = await reader.read(); if (done) break; await ws.write(value); got += value.byteLength; setState({ progress: got / file.size }); }
+  await ws.close();
+  await vfs.rm(`${DIR}/state.bin`, { silent: true }).catch(() => {});
+  const version = /alpine-\w+-([\d.]+)-x86/.exec(file.name)?.[1] || null;
+  await vfs.writeJSON(`${DIR}/manifest.json`, { iso: 'alpine.iso', file: file.name, version, imported: true, installed: Date.now() });
+  setState({ state: 'off', progress: 1, text: 'Linux image imported', version });
 }
 
 // Waits until the serial output (since `from`) matches re.
@@ -61,7 +98,8 @@ function waitFor(re, { timeout = 300000, from = 0 } = {}) {
   });
 }
 let serialText = '';
-const send = (s) => emu.serial0_send(s);
+// The serial port takes bytes: send UTF-8 so non-ASCII text survives.
+const send = (s) => { const u8 = new TextEncoder().encode(s); let b = ''; for (let i = 0; i < u8.length; i += 0x8000) b += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); emu.serial0_send(b); };
 
 export async function boot({ fresh = false } = {}) {
   if (emu && linuxStore.get().state === 'ready') return emu;
@@ -82,8 +120,10 @@ export async function boot({ fresh = false } = {}) {
       ...(settings.get().linux?.network ? { net_device: { type: 'virtio', relay_url: 'fetch' } } : {}),
       ...(stateFile ? { initial_state: { buffer: await stateFile.arrayBuffer() } } : {}),
     });
+    const utf8 = new TextDecoder();
     emu.add_listener('serial0-output-byte', (b) => {
-      const ch = String.fromCharCode(b);
+      const ch = utf8.decode(new Uint8Array([b]), { stream: true });
+      if (!ch) return;
       serialText += ch;
       if (serialText.length > 400000) serialText = serialText.slice(-200000);
       for (const fn of serialListeners) fn(ch);
@@ -92,16 +132,18 @@ export async function boot({ fresh = false } = {}) {
     if (stateFile) {
       setState({ text: 'Restoring snapshot…' });
       const from = serialText.length;
-      send('\necho __AIA_READY__\n');
-      await waitFor(/__AIA_READY__\r?\n/, { timeout: 60000, from });
+      // $((40+2)) only becomes 42 in real output, never in the terminal's echo of the typed command.
+      send('\necho __AIA_$((40+2))_READY__\n');
+      await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
     } else {
       setState({ text: 'Booting Alpine Linux (first start takes a minute or two)…' });
       await waitFor(/login: ?$/m, { timeout: 600000 });
       send('root\n');
       await waitFor(/[#$] ?$/m, { timeout: 120000 });
       const from = serialText.length;
-      send("stty -echo; export PS1=''; export TERM=dumb; mkdir -p /root/hub; cd /root; echo __AIA_READY__\n");
-      await waitFor(/__AIA_READY__/, { timeout: 60000, from });
+      send("stty -echo; export PS1=''; export TERM=dumb; mkdir -p /root/hub; cd /root; echo __AIA_$((40+2))_READY__\n");
+      await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
+      await new Promise(r => setTimeout(r, 300)); // let the prompt settle before the snapshot
       setState({ text: 'Saving a snapshot for fast starts…' });
       try { const st = await emu.save_state(); await vfs.write(`${DIR}/state.bin`, new Uint8Array(st), { silent: true }); } catch (e) { console.warn('VM snapshot failed', e); }
     }

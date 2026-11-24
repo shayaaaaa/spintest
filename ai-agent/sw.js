@@ -4,7 +4,7 @@
 // 2. Cross-origin isolation: adds COOP/COEP headers so SharedArrayBuffer works (multithreaded llama.cpp, ONNX, Python).
 // 3. Hub files: serves ./hub/<path> straight from the Origin Private File System with Range support, so model engines
 //    load weights from the Hub without a second copy in Cache Storage.
-const VERSION = 'e6ce97004c66';
+const VERSION = 'b6e9b26b9ced';
 const CORE = 'ai-agent-core-' + VERSION;
 const ENGINES = 'ai-agent-engines-v1';
 const SCOPE = new URL(self.registration.scope);
@@ -150,6 +150,8 @@ self.addEventListener('fetch', (e) => {
   const rel = url.pathname.slice(BASE.length);
   if (rel.startsWith('hub/')) { e.respondWith(serveHub(e.request, rel.slice(4))); return; }
   if (e.request.method !== 'GET') return;
+  // Large one-time downloads (Linux image) go straight to the network; the app stores them in the Hub itself.
+  if (rel.startsWith('runtimes/')) return;
   const isVendor = rel.startsWith('vendor/');
   e.respondWith((isVendor ? fromCacheFirst(e.request) : fromNetworkFirst(e.request)).then(isolate));
 });

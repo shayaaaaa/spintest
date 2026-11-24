@@ -1,0 +1,48 @@
+# Publishes the repository on GitHub Pages and adds the Linux VM image for Ai Agent next to the app, so the phone can
+# download it from the same origin (the Alpine mirror itself blocks cross-origin downloads in browsers).
+# Use it with: repository Settings → Pages → Build and deployment → Source: GitHub Actions.
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add the Alpine Linux image for the Ai Agent VM (checksum verified)
+        run: |
+          set -euo pipefail
+          base=https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86
+          curl -fsSL "$base/latest-releases.yaml" -o /tmp/rel.yaml
+          file=$(awk '/flavor: alpine-virt$/{f=1} f && /^ *file:/{print $2; exit}' /tmp/rel.yaml)
+          sha=$(awk '/flavor: alpine-virt$/{f=1} f && /^ *sha256:/{print $2; exit}' /tmp/rel.yaml)
+          ver=$(echo "$file" | sed -E 's/alpine-virt-([0-9.]+)-x86\.iso/\1/')
+          mkdir -p ai-agent/runtimes
+          curl -fsSL "$base/$file" -o ai-agent/runtimes/alpine.iso
+          echo "$sha  ai-agent/runtimes/alpine.iso" | sha256sum -c -
+          printf '{"file":"%s","version":"%s","sha256":"%s"}\n' "$file" "$ver" "$sha" > ai-agent/runtimes/alpine.json
+          cat ai-agent/runtimes/alpine.json
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
