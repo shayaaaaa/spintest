@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <title>Ai Agent</title>
+  <meta name="description" content="Offline AI agent, code editor, chat and model training studio that runs on your phone.">
+  <meta name="theme-color" content="#0d0d10" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f7f7f8" media="(prefers-color-scheme: light)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Ai Agent">
+  <meta name="format-detection" content="telephone=no">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="stylesheet" href="src/styles/app.css">
+  <link rel="modulepreload" href="vendor/preact.mjs">
+  <link rel="modulepreload" href="src/main.js">
+</head>
+<body>
+  <div id="app">
+    <div class="boot">
+      <div class="boot-logo"><img src="icons/icon-192.png" alt="" width="72" height="72"></div>
+      <div class="boot-text" id="boot-text">Starting…</div>
+    </div>
+  </div>
+  <noscript>Ai Agent needs JavaScript.</noscript>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
