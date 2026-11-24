@@ -68,8 +68,10 @@ await test('tabs switch', async () => {
 });
 await ctx.close();
 
-const u = await openApp(browser, base, { size: DUO.unfolded, reloadForIsolation: false });
+// Wait for the service worker's one-time isolation reload, otherwise the check can race it.
+const u = await openApp(browser, base, { size: DUO.unfolded });
 await test('unfolded shows rail and two panes', async () => {
+  await u.page.waitForSelector('.rail', { timeout: 15000 });
   assert(await u.page.locator('.rail').count() === 1, 'rail');
   assert(await u.page.locator('.pane').count() === 2, 'two panes');
 });
