@@ -11,10 +11,21 @@ export const DUO = {
 };
 
 let server = null;
+const ARGS = ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader'];
 export async function setup({ port = 8091 } = {}) {
   if (!server) server = await start(port);
-  const browser = await chromium.launch({ args: ['--enable-unsafe-webgpu', '--enable-features=Vulkan', '--use-angle=swiftshader', '--use-webgpu-adapter=swiftshader'] });
+  const browser = await chromium.launch({ args: ARGS });
   return { browser, base: `http://localhost:${port}/ai-agent/` };
+}
+
+// A disk-backed profile: default Playwright contexts are incognito-like with a small in-memory storage quota, too
+// small for suites that keep several model files in OPFS. Returns {ctx, base, close}.
+export async function setupPersistent({ port = 8091, size = DUO.folded, colorScheme = 'dark' } = {}) {
+  if (!server) server = await start(port);
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'aia-profile-'));
+  const ctx = await chromium.launchPersistentContext(dir, { args: ARGS, viewport: size, hasTouch: true, colorScheme });
+  return { ctx, base: `http://localhost:${port}/ai-agent/`, close: async () => { await ctx.close(); fs.rmSync(dir, { recursive: true, force: true }); } };
 }
 
 export async function openApp(browser, base, { size = DUO.folded, hash = '', scale = 1, reloadForIsolation = true, colorScheme = 'dark', ctx: existing } = {}) {

@@ -2,12 +2,13 @@
 // download → LoRA SFT teaches a new fact → chat with the run → export adapter / merged safetensors / GGUF (q8_0, f16)
 // → the merged Forge model and the GGUF (llama.cpp via wllama) both answer with the fact. Then short DPO, GRPO and
 // from-scratch runs. Usage: node tests/forge-train.mjs [--only=sft,dpo,grpo,scratch]
-import { setup, openApp, DUO, stopServer } from './lib.mjs';
+import { setupPersistent, openApp, DUO, stopServer } from './lib.mjs';
 
 const only = (process.argv.find(a => a.startsWith('--only=')) || '').slice(7).split(',').filter(Boolean);
 const want = (k) => !only.length || only.includes(k);
-const { browser, base } = await setup({ port: 8095 });
-const { page, logs } = await openApp(browser, base, { size: DUO.unfolded });
+// Disk-backed profile: this suite keeps ~1 GB of models in OPFS (base, merged, two GGUFs).
+const { ctx, base, close } = await setupPersistent({ port: 8095, size: DUO.unfolded });
+const { page, logs } = await openApp(null, base, { size: DUO.unfolded, ctx });
 page.setDefaultTimeout(3600000);
 const t0 = Date.now();
 const log = (...a) => console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s]`, ...a);
@@ -194,5 +195,5 @@ if (want('scratch')) {
 const errs = logs.filter(l => /pageerror|WebGPU error/.test(l));
 if (errs.length) { console.log(errs.slice(0, 10).join('\n')); }
 console.log(fails ? `${fails} failed` : 'all passed');
-await browser.close(); stopServer();
+await close(); stopServer();
 process.exit(fails ? 1 : 0);

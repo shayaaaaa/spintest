@@ -23,6 +23,9 @@ export const SCRATCH = {
   base: { label: 'Base · ~110M', hidden_size: 768, num_hidden_layers: 12, num_attention_heads: 12, num_key_value_heads: 4, intermediate_size: 2048, vocab: 32000 },
 };
 
+// Storage quota errors read badly ("QuotaExceededError…"): say what to do instead.
+const friendly = (e) => /quota/i.test(String(e?.message || e) + (e?.name || '')) ? new Error('Not enough free storage on this phone for that. Delete models you no longer need (Studio → Models) or old runs (Studio → Train), then try again.') : e;
+
 const live = (id) => runsStore.get().live[id] || { metrics: [], evals: [], samples: [], rollouts: [], warns: [] };
 function patchLive(id, fn) { runsStore.set(s => ({ ...s, live: { ...s.live, [id]: fn(live(id)) } })); }
 const cap = (a, n) => a.length > n ? a.slice(a.length - n) : a;
@@ -210,7 +213,7 @@ export async function startRun(i) {
 async function launch(run, rows, valRows, resume) {
   try { const { unloadLocal } = await import('../models/registry.js'); await unloadLocal(); } catch {}
   rpc('train', { id: run.id, runDir: run.dir, method: run.method, tuning: run.tuning, baseDir: run.baseDir, rows, valRows, resume, ...run.config })
-    .catch((e) => { saveRun(run.id, { state: 'error', error: String(e.message || e), statusText: String(e.message || e) }); runsStore.set(s => ({ ...s, active: s.active === run.id ? null : s.active })); })
+    .catch((err) => { const e = friendly(err); saveRun(run.id, { state: 'error', error: String(e.message || e), statusText: String(e.message || e) }); runsStore.set(s => ({ ...s, active: s.active === run.id ? null : s.active })); })
     .finally(() => import('../models/registry.js').then(m => m.refreshModels()).catch(() => {}));
 }
 
@@ -243,7 +246,8 @@ export async function exportRun(id, what, opts = {}) {
   if (runsStore.get().active) throw new Error('Wait for the active run to finish or pause it before exporting.');
   const run = runsStore.get().runs.find(r => r.id === id);
   if (!run) throw new Error('Run not found');
-  const r = await rpc('exportRun', { run, what, ...opts });
+  let r;
+  try { r = await rpc('exportRun', { run, what, ...opts }); } catch (e) { throw friendly(e); }
   const { refreshModels } = await import('../models/registry.js');
   await refreshModels();
   vfs.events.emit('change', { path: r.dir, type: 'write' });
