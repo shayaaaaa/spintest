@@ -137,7 +137,9 @@ Verification:
   the isomorphic-git CORS proxy; tokens come from Settings → Keys.
 - `src/runtimes/linux.js`: Alpine Linux (official x86 *virt* ISO, SHA-256 verified) in v86, driven over the serial
   console with exit-status markers. A snapshot after first boot makes later starts take seconds. `--put`/`--get`
-  move files between the Hub and the VM.
+  move files between the Hub and the VM. The Alpine mirror sends no CORS headers, so the image comes from a
+  same-origin copy that `.github/workflows/pages.yml` publishes at deploy time. The fallbacks are the user's proxy,
+  a direct download, or importing an ISO file.
 
 ## Testing environment notes
 
