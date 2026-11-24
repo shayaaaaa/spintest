@@ -1,6 +1,8 @@
-# Publishes the repository on GitHub Pages and adds the Linux VM image for Ai Agent next to the app, so the phone can
-# download it from the same origin (the Alpine mirror itself blocks cross-origin downloads in browsers).
-# Use it with: repository Settings → Pages → Build and deployment → Source: GitHub Actions.
+# Optional: publish the site with GitHub Actions instead of "Deploy from a branch". Besides the repository files it
+# adds the checksum-verified Alpine Linux image next to Ai Agent, so the app's Linux VM can download it from the same
+# origin (the Alpine mirror itself blocks cross-origin downloads in browsers).
+# To use it: repository Settings → Pages → Build and deployment → Source: GitHub Actions.
+# While Pages publishes from a branch, this workflow only checks the setting and does nothing else.
 name: Deploy GitHub Pages
 
 on:
@@ -8,18 +10,34 @@ on:
     branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
-
 concurrency:
   group: pages
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  check:
     runs-on: ubuntu-latest
+    permissions:
+      pages: read
+    outputs:
+      build_type: ${{ steps.mode.outputs.build_type }}
+    steps:
+      - id: mode
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          t=$(gh api "repos/${{ github.repository }}/pages" --jq .build_type 2>/dev/null || echo none)
+          echo "build_type=$t" >> "$GITHUB_OUTPUT"
+          if [ "$t" != workflow ]; then echo "::notice::Pages publishes from a branch ($t), so there is nothing to deploy here. Set Settings → Pages → Source to GitHub Actions to also publish the Linux VM image."; fi
+
+  deploy:
+    needs: check
+    if: needs.check.outputs.build_type == 'workflow'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
