@@ -76,17 +76,20 @@ async function boot() {
   if (q.get('share')) bus.emit('share', { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' });
   if (q.get('shortcut-result')) bus.emit('shortcut-result', { id: q.get('id'), result: q.get('shortcut-result') });
   if (q.toString()) history.replaceState(null, '', location.pathname + location.hash);
-  // First launch: install the Linux VM image that ships with the app (49 MB, once), after the UI has settled.
+  // First launch: install the Linux VM that ships with the app (49 MB) and run its one-time first boot in the
+  // background, so `linux` in the terminal starts in about a second from then on. Runs again only if unfinished.
   setTimeout(async () => {
     try {
       const linux = await import('./runtimes/linux.js');
-      if (await linux.isInstalled()) return;
+      if (await linux.isPrepared()) return;
       const { toast } = await import('./ui/kit.js');
-      const started = linux.autoInstall();
-      setTimeout(() => { if (linux.linuxStore.get().state === 'downloading') toast('Installing the Linux VM in the background (49 MB, one time)…'); }, 300);
-      const meta = await started;
-      if (meta) toast('Linux VM installed. Type linux in the Code tab terminal.', 'ok', 5000);
-    } catch (e) { console.warn('Linux VM auto-install failed; it can be installed from Settings → Storage & offline', e); }
+      const msg = {
+        installing: 'Installing the Linux VM in the background (49 MB, one time)…',
+        preparing: 'Setting up the Linux VM: first boot in the background (one time, about a minute)…',
+        ready: 'Linux VM ready. Type linux in the Code tab terminal: it starts in a second, offline too.',
+      };
+      await linux.autoSetup({ onStage: (st) => toast(msg[st], st === 'ready' ? 'ok' : 'info', st === 'ready' ? 6000 : 4000) });
+    } catch (e) { console.warn('Linux VM setup did not finish; it continues on the next launch or from Settings → Storage & offline', e); }
   }, 6000);
 }
 

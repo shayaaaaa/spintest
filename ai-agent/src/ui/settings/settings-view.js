@@ -238,14 +238,19 @@ const RUNTIMES = [
   { id: 'ffmpeg', name: 'ffmpeg', blurb: 'Audio/video conversion and editing for the Media tool.', size: '~32 MB',
     install: async () => (await import('../../agent/tools/media.js')).ensureFfmpeg() },
   { id: 'linux', name: 'Linux VM (Alpine)', blurb: 'A real Linux shell in the terminal: type linux, or linux <command>. The image ships with the app and installs automatically on first launch.', size: '49 MB',
-    install: async () => (await import('../../runtimes/linux.js')).install() },
+    install: async () => { const L = await import('../../runtimes/linux.js'); await L.install(); await L.prepare(); } },
 ];
 function Runtimes() {
   const [sizes, setSizes] = useState({});
   const [busy, setBusy] = useState(null);
   const lin = useStore(linuxStore);
   const net = useStore(settings, s => !!s.linux?.network);
-  const load = async () => { const o = {}; for (const r of RUNTIMES) o[r.id] = await vfs.du('/runtimes/' + r.id).catch(() => ({ bytes: 0, files: 0 })); setSizes(o); };
+  const [linuxReady, setLinuxReady] = useState(false);
+  const load = async () => {
+    const o = {}; for (const r of RUNTIMES) o[r.id] = await vfs.du('/runtimes/' + r.id).catch(() => ({ bytes: 0, files: 0 })); setSizes(o);
+    setLinuxReady(await (await import('../../runtimes/linux.js')).isPrepared());
+  };
+  useEffect(() => { if (lin.state === 'ready' || lin.state === 'off') load(); }, [lin.state]);
   useEffect(() => { load(); }, []);
   const act = async (r, what) => {
     setBusy(r.id);
@@ -271,7 +276,7 @@ function Runtimes() {
   };
   return html`<div class="card"><div class="card-title">Runtimes</div>
     ${RUNTIMES.map(r => { const have = sizes[r.id]?.bytes > 0; return html`<div class="row" style="padding:8px 0;border-top:1px solid var(--border);align-items:flex-start">
-      <div class="grow" style="min-width:0"><div style="font-weight:600">${r.name}${have ? html` <span class="tag ok">${fmtBytes(sizes[r.id].bytes)}</span>` : ''}</div>
+      <div class="grow" style="min-width:0"><div style="font-weight:600">${r.name}${have ? html` <span class="tag ok">${fmtBytes(sizes[r.id].bytes)}</span>` : ''}${r.id === 'linux' && have ? html` <span class=${'tag ' + (linuxReady ? 'ok' : 'warn')}>${linuxReady ? 'starts in ~1 s' : 'first start ~1 min'}</span>` : ''}</div>
         <div class="small dim">${r.blurb}${have ? '' : ` Download ${r.size}.`}</div>
         ${r.id === 'linux' && (lin.state === 'downloading' || lin.state === 'booting') && html`<div style="margin-top:6px"><${Progress} value=${lin.progress || 0} indet=${lin.state === 'booting'} /><div class="small dim">${lin.text}</div></div>`}
         ${r.id === 'linux' && have && html`<div style="margin-top:6px"><${Toggle} on=${net} onChange=${v => setSetting('linux.network', v)} label="Network inside the VM (experimental, HTTP via the browser)" /></div>`}</div>

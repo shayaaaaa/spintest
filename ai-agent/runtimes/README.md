@@ -5,8 +5,9 @@
 https://dl-cdn.alpinelinux.org/alpine/v3.24/releases/x86/. It ships with the app because the Alpine mirror does not
 allow downloads from web pages (no CORS headers).
 
-Ai Agent installs it into the Hub (`Hub/runtimes/linux/`) automatically the first time the app opens, verifies the
-checksum, and runs it in the v86 emulator (type `linux` in the Code tab terminal).
+Ai Agent installs it into the Hub (`Hub/runtimes/linux/`) automatically the first time the app opens and verifies
+the checksum. It then boots it once in the background and saves a snapshot, so `linux` in the Code tab terminal starts
+in about a second from then on.
 
 Alpine Linux and its packages are free software under their own licenses (mostly GPL, MIT and BSD). Source code is
 available from https://alpinelinux.org/ and https://gitlab.alpinelinux.org/alpine/aports.

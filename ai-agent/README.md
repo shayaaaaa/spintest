@@ -24,9 +24,9 @@ panes and a single pane.
 4. First launch:
    - The app asks iOS to keep its storage (Settings → Storage & offline shows the result), so iOS doesn't evict your
      models.
-   - The **Linux VM** installs itself in the background (the official Alpine Linux image ships with the app in
-     `ai-agent/runtimes/`, 49 MB, one time). Type `linux` in the Code tab's terminal; the first start boots for about a
-     minute, later starts take a second.
+   - The **Linux VM** sets itself up in the background (the official Alpine Linux image ships with the app in
+     `ai-agent/runtimes/`, 49 MB). It installs, then boots once to save a snapshot (about a minute, one time). After
+     the "Linux VM ready" notice, type `linux` in the Code tab's terminal: it starts in about a second, offline too.
    - **Studio → Models**: download a model. *Qwen3 4B Instruct* (2.5 GB) is the recommended agent model. For training,
      download one from **For training** (e.g. *SmolLM2 360M* or *Qwen2.5 0.5B*).
    - Optional: **Settings → Keys** for cloud models (Anthropic, OpenAI-compatible), a Hugging Face token (private repos,

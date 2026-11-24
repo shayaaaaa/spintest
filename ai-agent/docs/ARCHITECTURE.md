@@ -138,8 +138,11 @@ Verification:
 - `src/runtimes/linux.js`: Alpine Linux (official x86 *virt* ISO, SHA-256 verified) in v86, driven over the serial
   console with exit-status markers. A snapshot after first boot makes later starts take seconds. `--put`/`--get`
   move files between the Hub and the VM. The Alpine mirror sends no CORS headers, so the official ISO ships with the
-  app (`ai-agent/runtimes/alpine.iso` + `alpine.json` with its SHA-256). `autoInstall()` copies it into the Hub
-  shortly after the first launch, skipping offline, Data Saver, automation, or when the user removed it. The
+  app (`ai-agent/runtimes/alpine.iso` + `alpine.json` with its SHA-256). On first launch `autoSetup()` copies it into the Hub
+  and then `prepare()` boots it once in the background, saves the snapshot (~140 MB), and stops the VM again. This
+  is skipped under automation or after the user removed Linux; the install also waits while offline or in Data
+  Saver. A snapshot that can't be restored (bad header, other emulator version) is discarded and replaced by a fresh
+  boot. The
   fallbacks are the user's proxy, a direct download, or importing an ISO file.
 
 ## Testing environment notes

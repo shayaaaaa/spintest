@@ -60,9 +60,16 @@ if (!only || only === 'linux') {
     out.autoUrls = urls;
     out.manifest = await vfs.readJSON('/runtimes/linux/manifest.json', null);
     out.autoAgain = await L.autoInstall({ force: true });
+    // One-time first boot in the background: creates the snapshot, then stops the VM again.
     let t = performance.now();
+    out.prepared = await L.prepare();
+    out.prepareMs = performance.now() - t;
+    out.stateAfterPrepare = L.linuxStore.get().state;
+    out.snapshotSize = (await vfs.stat('/runtimes/linux/state.bin').catch(() => ({}))).size || 0;
+    out.prepareAgain = await L.prepare();
+    t = performance.now();
     out.uname = await run('uname -sm');
-    out.firstBootMs = performance.now() - t;
+    out.firstCmdMs = performance.now() - t;
     out.math = await run('echo $((6*7))');
     out.fail = await run('false');
     out.multi = await run('for i in 1 2 3; do echo n$i; done');
@@ -80,9 +87,18 @@ if (!only || only === 'linux') {
     out.restoreMs = performance.now() - t;
     out.snapshot = !!(await vfs.stat('/runtimes/linux/state.bin').catch(() => null));
     await L.shutdown();
+    // A damaged snapshot must not break Linux: it is replaced by a fresh boot.
+    out.magic = new DataView(await (await vfs.getFile('/runtimes/linux/state.bin')).slice(0, 4).arrayBuffer()).getUint32(0, true).toString(16);
+    await vfs.write('/runtimes/linux/state.bin', new Uint8Array(4096).fill(7));
+    out.recovered = await run('echo recovered');
+    out.recoveredSnapshot = (await vfs.stat('/runtimes/linux/state.bin').catch(() => ({}))).size || 0;
+    await L.shutdown();
     return out;
   });
-  console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s] first boot ${(r.firstBootMs / 1000).toFixed(0)}s, snapshot restore ${(r.restoreMs / 1000).toFixed(1)}s`);
+  console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s] background first boot ${(r.prepareMs / 1000).toFixed(0)}s (snapshot ${(r.snapshotSize / 1e6).toFixed(0)} MB), first command after it ${(r.firstCmdMs / 1000).toFixed(1)}s, later restore ${(r.restoreMs / 1000).toFixed(1)}s`);
+  check('linux: background first boot makes a snapshot and stops the VM', r.prepared === true && r.snapshotSize > 1e6 && r.stateAfterPrepare === 'off', JSON.stringify({ prepared: r.prepared, size: r.snapshotSize, state: r.stateAfterPrepare }));
+  check('linux: first boot runs only once', r.prepareAgain === false);
+  check('linux: first command after setup starts from the snapshot', r.firstCmdMs < 30000, `${(r.firstCmdMs / 1000).toFixed(1)}s`);
   check('linux: auto-install from the bundled image', r.auto?.version && r.manifest?.sha256 === r.auto.sha256 && r.autoUrls.every(u => u.startsWith('http://localhost')), JSON.stringify({ v: r.manifest?.version, urls: r.autoUrls }));
   check('linux: auto-install runs only once', r.autoAgain === null);
   check('linux: uname', r.uname.code === 0 && /Linux i686/.test(r.uname.s), r.uname.s);
@@ -93,6 +109,8 @@ if (!only || only === 'linux') {
   check('linux: UTF-8 in and out of the VM', r.utf8.s.trim() === 'héllo ✓ 世界', r.utf8.s);
   check('linux: --get copies a VM file out', r.got.trim() === 'made-in-vm', r.got);
   check('linux: shell state persists between commands', r.cdPersist === '/etc|/etc', r.cdPersist);
+  check('linux: snapshot has the v86 state header', ['86768676', 'fd2fb528'].includes(r.magic), r.magic);
+  check('linux: damaged snapshot is replaced by a fresh boot', /(^|\n)recovered$/.test(r.recovered.s.trim()) && r.recoveredSnapshot > 1e6, `${r.recovered.s.trim().split('\n').pop()} ${r.recoveredSnapshot}`);
   check('linux: snapshot saved and restored', r.snapshot && /(^|\n)restored$/.test(r.again.s.trim()) && r.restoreMs < 30000, `${r.again.s} ${(r.restoreMs / 1000).toFixed(1)}s`);
 }
 

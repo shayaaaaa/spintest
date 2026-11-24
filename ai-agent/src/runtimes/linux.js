@@ -128,46 +128,18 @@ export async function boot({ fresh = false } = {}) {
   booting = (async () => {
     const man = await vfs.readJSON(`${DIR}/manifest.json`, null);
     if (!man) await install();
-    setState({ state: 'booting', text: 'Starting the Linux VM…', progress: 0 });
-    const { V86 } = await import('../../vendor/v86/libv86.mjs');
-    const iso = await (await vfs.getFile(`${DIR}/alpine.iso`)).arrayBuffer();
-    const stateFile = !fresh && await vfs.getFile(`${DIR}/state.bin`).catch(() => null);
-    serialText = '';
-    emu = new V86({
-      wasm_path: vendor('v86.wasm'), memory_size: MEM, vga_memory_size: 2 * 1024 * 1024,
-      bios: { url: vendor('seabios.bin') }, vga_bios: { url: vendor('vgabios.bin') },
-      cdrom: { buffer: iso }, boot_order: 0x123, autostart: true,
-      disable_keyboard: true, disable_mouse: true, disable_speaker: true,
-      ...(settings.get().linux?.network ? { net_device: { type: 'virtio', relay_url: 'fetch' } } : {}),
-      ...(stateFile ? { initial_state: { buffer: await stateFile.arrayBuffer() } } : {}),
-    });
-    const utf8 = new TextDecoder();
-    emu.add_listener('serial0-output-byte', (b) => {
-      const ch = utf8.decode(new Uint8Array([b]), { stream: true });
-      if (!ch) return;
-      serialText += ch;
-      if (serialText.length > 400000) serialText = serialText.slice(-200000);
-      for (const fn of serialListeners) fn(ch);
-    });
-    await new Promise((r) => emu.add_listener('emulator-ready', r));
-    if (stateFile) {
-      setState({ text: 'Restoring snapshot…' });
-      const from = serialText.length;
-      // $((40+2)) only becomes 42 in real output, never in the terminal's echo of the typed command.
-      send('\necho __AIA_$((40+2))_READY__\n');
-      await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
-    } else {
-      setState({ text: 'Booting Alpine Linux (first start takes a minute or two)…' });
-      await waitFor(/login: ?$/m, { timeout: 600000 });
-      send('root\n');
-      await waitFor(/[#$] ?$/m, { timeout: 120000 });
-      const from = serialText.length;
-      send("stty -echo; export PS1=''; export TERM=dumb; mkdir -p /root/hub; cd /root; echo __AIA_$((40+2))_READY__\n");
-      await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
-      await new Promise(r => setTimeout(r, 300)); // let the prompt settle before the snapshot
-      setState({ text: 'Saving a snapshot for fast starts…' });
-      try { const st = await emu.save_state(); await vfs.write(`${DIR}/state.bin`, new Uint8Array(st), { silent: true }); } catch (e) { console.warn('VM snapshot failed', e); }
-    }
+    const hasSnapshot = !fresh && await snapshotLooksValid();
+    if (hasSnapshot) {
+      try { await start(true); }
+      catch (e) {
+        // A snapshot from another emulator version (or a damaged one) can't be restored: boot fresh and replace it.
+        console.warn('Linux VM snapshot could not be restored; booting fresh', e);
+        try { emu?.destroy(); } catch {}
+        emu = null;
+        await vfs.rm(`${DIR}/state.bin`, { silent: true }).catch(() => {});
+        await start(false);
+      }
+    } else await start(false);
     globalThis.__aiaLinuxReady = true;
     setState({ state: 'ready', text: 'Linux is running', progress: 1, version: man?.version || null });
     return emu;
@@ -175,6 +147,93 @@ export async function boot({ fresh = false } = {}) {
   try { return await booting; }
   catch (e) { setState({ state: 'error', text: String(e.message || e) }); try { emu?.destroy(); } catch {} emu = null; throw e; }
   finally { booting = null; }
+}
+
+async function start(restore) {
+  setState({ state: 'booting', text: restore ? 'Starting the Linux VM…' : 'Booting Alpine Linux (one time, about a minute)…', progress: 0 });
+  const { V86 } = await import('../../vendor/v86/libv86.mjs');
+  const iso = await (await vfs.getFile(`${DIR}/alpine.iso`)).arrayBuffer();
+  const state = restore ? await (await vfs.getFile(`${DIR}/state.bin`)).arrayBuffer() : null;
+  serialText = '';
+  emu = new V86({
+    wasm_path: vendor('v86.wasm'), memory_size: MEM, vga_memory_size: 2 * 1024 * 1024,
+    bios: { url: vendor('seabios.bin') }, vga_bios: { url: vendor('vgabios.bin') },
+    cdrom: { buffer: iso }, boot_order: 0x123, autostart: true,
+    disable_keyboard: true, disable_mouse: true, disable_speaker: true,
+    ...(settings.get().linux?.network ? { net_device: { type: 'virtio', relay_url: 'fetch' } } : {}),
+    ...(state ? { initial_state: { buffer: state } } : {}),
+  });
+  const utf8 = new TextDecoder();
+  emu.add_listener('serial0-output-byte', (b) => {
+    const ch = utf8.decode(new Uint8Array([b]), { stream: true });
+    if (!ch) return;
+    serialText += ch;
+    if (serialText.length > 400000) serialText = serialText.slice(-200000);
+    for (const fn of serialListeners) fn(ch);
+  });
+  await new Promise((r) => emu.add_listener('emulator-ready', r));
+  if (restore) {
+    const from = serialText.length;
+    // $((40+2)) only becomes 42 in real output, never in the terminal's echo of the typed command.
+    send('\necho __AIA_$((40+2))_READY__\n');
+    await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
+    return;
+  }
+  await waitFor(/login: ?$/m, { timeout: 600000 });
+  send('root\n');
+  await waitFor(/[#$] ?$/m, { timeout: 120000 });
+  const from = serialText.length;
+  send("stty -echo; export PS1=''; export TERM=dumb; mkdir -p /root/hub; cd /root; echo __AIA_$((40+2))_READY__\n");
+  await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
+  await new Promise(r => setTimeout(r, 300)); // let the prompt settle before the snapshot
+  setState({ text: 'Saving a snapshot for fast starts…' });
+  try { const st = await emu.save_state(); await vfs.write(`${DIR}/state.bin`, new Uint8Array(st), { silent: true }); }
+  catch (e) { console.warn('VM snapshot failed', e); }
+}
+
+// v86 snapshots start with its state magic (0x86768676) or, when compressed, the zstd magic (0xFD2FB528).
+async function snapshotLooksValid() {
+  const f = await vfs.getFile(`${DIR}/state.bin`).catch(() => null);
+  if (!f || f.size < 1024) { if (f) await vfs.rm(`${DIR}/state.bin`, { silent: true }).catch(() => {}); return false; }
+  const magic = new DataView(await f.slice(0, 4).arrayBuffer()).getUint32(0, true);
+  if (magic === 0x86768676 || magic === 0xFD2FB528) return true;
+  await vfs.rm(`${DIR}/state.bin`, { silent: true }).catch(() => {});
+  return false;
+}
+
+export async function isPrepared() { return !!(await vfs.stat(`${DIR}/state.bin`).catch(() => null)); }
+
+// Boots the VM once in the background so its snapshot exists (later starts take a second), then stops it again
+// unless the user started using it meanwhile. Gives up after two failed attempts so it never loops on every launch.
+let useCount = 0;
+export async function prepare() {
+  if (!(await isInstalled()) || await isPrepared()) return false;
+  const man = await vfs.readJSON(`${DIR}/manifest.json`, {});
+  if ((man.prepareFailures || 0) >= 2) return false;
+  const usedBefore = useCount;
+  try { await boot(); }
+  catch (e) { await vfs.writeJSON(`${DIR}/manifest.json`, { ...man, prepareFailures: (man.prepareFailures || 0) + 1 }); throw e; }
+  if (!(await isPrepared())) { await vfs.writeJSON(`${DIR}/manifest.json`, { ...man, prepareFailures: (man.prepareFailures || 0) + 1 }); }
+  if (useCount === usedBefore) await shutdown();
+  return true;
+}
+
+// Everything a first launch needs: copy the bundled image into the Hub, then run the one-time first boot.
+// onStage('installing' | 'preparing' | 'ready'). Same opt-outs as autoInstall.
+export async function autoSetup({ force = false, onStage = () => {} } = {}) {
+  if (!force && (settings.get().linux?.autoInstall === false || navigator.webdriver)) return null;
+  if (!(await isInstalled())) {
+    onStage('installing');
+    if (!(await autoInstall({ force }))) return null;
+  }
+  if (await isPrepared()) return 'ready';
+  const man = await vfs.readJSON(`${DIR}/manifest.json`, {});
+  if (!force && (man.prepareFailures || 0) >= 2) return null;
+  onStage('preparing');
+  await prepare();
+  if (!(await isPrepared())) return null;
+  onStage('ready');
+  return 'ready';
 }
 
 export async function shutdown() {
@@ -213,6 +272,7 @@ const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 // Entry point for the shell's `linux` command. Extras: `linux --put <hub-file> [vm-path]`, `linux --get <vm-file> [hub-path]`,
 // `linux --status`, `linux --stop`, `linux --reset` (fresh boot, new snapshot).
 export function linuxRun(cmdline, { io, cwd = '/', signal } = {}) {
+  useCount++;
   const job = queue.then(async () => {
     const args = cmdline.trim().split(/\s+/);
     if (args[0] === '--status') { const s = linuxStore.get(); io?.out(`${s.state}${s.version ? ' · Alpine ' + s.version : ''} · ${s.text}\n`); return 0; }
@@ -246,6 +306,7 @@ export function linuxRun(cmdline, { io, cwd = '/', signal } = {}) {
 
 // Interactive console: raw serial passthrough (for xterm). Returns a detach function.
 export async function attachConsole(write) {
+  useCount++;
   await boot();
   const off = onSerial(write);
   send('stty echo; export PS1="\\w # "\n');
