@@ -89,7 +89,7 @@ function NewRun({ onStarted, onCancel }) {
     catch (e) { toast(String(e.message || e), 'err', 7000); }
     finally { setBusy(false); }
   };
-  const goModels = () => bus.emit('studio-tab', 'models');
+  const goModels = () => { bus.emit('models-tab', 'train'); bus.emit('studio-tab', 'models'); };
   return html`<div class="card">
     <div class="card-title"><${Icon} name="flask" />New training run${onCancel && html`<span class="grow"></span><button class="ibtn sm" onClick=${onCancel} aria-label="Close"><${Icon} name="x" /></button>`}</div>
     <div class="field"><label>Method</label>

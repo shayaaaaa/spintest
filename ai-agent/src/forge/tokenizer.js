@@ -64,7 +64,7 @@ export class Tok {
     if (bos && this.bos != null) ids.unshift(this.bos);
     return ids;
   }
-  decode(ids, { skipSpecial = false } = {}) { return this.t.decode(ids, { skip_special_tokens: skipSpecial }); }
+  decode(ids, { skipSpecial = false } = {}) { return ids?.length ? this.t.decode(Array.from(ids), { skip_special_tokens: skipSpecial }) : ''; }
 
   // Renders a chat with the model's template. messages: [{role, content}].
   chat(messages, { addGenerationPrompt = false, tools, thinking } = {}) {

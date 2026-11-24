@@ -2,6 +2,7 @@
 import { html, useState, useEffect } from '../../../vendor/preact.mjs';
 import { useStore } from '../../core/store.js';
 import { Icon } from '../icons.js';
+import { bus } from '../../core/bus.js';
 import { Seg, Progress, toast, confirmDialog, openMenu, Banner, openSheet, Empty } from '../kit.js';
 import { downloads, pause, resume, cancel, restorePending } from '../../models/downloader.js';
 import { modelsStore, refreshModels, installGGUF, installMLC, installONNX, installSafetensors, deleteModel, engineLabel, unloadLocal, getEngine } from '../../models/registry.js';
@@ -60,11 +61,16 @@ function FitTag({ sizeGB, context, params }) {
   return html`<span class=${'tag ' + f.cls}>${f.label}</span>`;
 }
 
+// Other panels can ask for a catalog section (e.g. Train → "Get one" opens "For training").
+let pendingCatalogTab = null;
+bus.on('models-tab', (t) => { pendingCatalogTab = t; });
+
 function Catalog() {
   const { local } = useStore(modelsStore);
   const have = (pred) => local.some(pred);
-  const [tab, setTab] = useState('recommended');
+  const [tab, setTab] = useState(() => { const t = pendingCatalogTab; pendingCatalogTab = null; return t || 'recommended'; });
   const [mlc, setMlc] = useState(null);
+  useEffect(() => bus.on('models-tab', (t) => setTab(t)), []);
   useEffect(() => { if (tab === 'webllm' && !mlc) import('../../models/local/webllm.js').then(m => m.webllmCatalog()).then(setMlc).catch(e => toast(e.message, 'err')); }, [tab]);
   const dlBtn = (onClick, done) => done ? html`<span class="tag ok">Downloaded</span>` : html`<button class="btn sm primary" onClick=${() => onClick().then(() => toast('Download started', 'ok')).catch(e => toast(String(e.message || e), 'err', 6000))}><${Icon} name="download" />Download</button>`;
   return html`<div class="section-title"><${Icon} name="sparkles" size=${14} />Get models</div>

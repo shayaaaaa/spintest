@@ -98,9 +98,16 @@ function paramCount(hf) {
 async function resolveBase(base) {
   if (!base || base === 'scratch') return null;
   const { modelsStore, refreshModels } = await import('../models/registry.js');
-  if (!modelsStore.get().local.length) await refreshModels();
-  const all = modelsStore.get().local;
-  return all.find(m => m.ref === base) || all.find(m => m.id === base || m.name === base || m.source?.repo === base) || null;
+  const find = () => { const all = modelsStore.get().local; return all.find(m => m.ref === base) || all.find(m => m.id === base || m.name === base || m.source?.repo === base) || null; };
+  let m = find();
+  if (!m) { await refreshModels(); m = find(); }
+  if (!m) {
+    // Read the manifest straight from the ref (local:<kind>/<id>) as a last resort.
+    const p = /^local:(\w+)\/(.+)$/.exec(base);
+    const man = p && await vfs.readJSON(`/models/${p[1]}/${p[2]}/manifest.json`, null);
+    if (man) m = { ...man, kind: man.kind || p[1], id: man.id || p[2], dir: `/models/${p[1]}/${p[2]}`, ref: base };
+  }
+  return m;
 }
 
 export async function estimate(i) {

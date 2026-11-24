@@ -12,11 +12,19 @@ export const modelsStore = createStore({ local: [], loaded: null, status: { stat
 
 export async function refreshModels() {
   const local = [];
+  const prev = modelsStore.get().local;
   for (const kind of KINDS) {
-    for (const e of await vfs.list(`/models/${kind}`, { details: false }).catch(() => [])) {
+    let entries;
+    try { entries = await vfs.list(`/models/${kind}`, { details: false }); }
+    catch (e) { if (e.code !== 'ENOENT') local.push(...prev.filter(m => m.ref?.startsWith(`local:${kind}/`))); continue; }
+    for (const e of entries) {
       if (e.kind !== 'directory') continue;
-      const man = await vfs.readJSON(`${e.path}/manifest.json`, null);
-      if (man) local.push({ ...man, kind: man.kind || kind, id: man.id || e.name, dir: e.path, ref: `local:${kind}/${e.name}` });
+      const ref = `local:${kind}/${e.name}`;
+      let man;
+      // A transient read failure must not make a model disappear: keep what we knew about it.
+      try { man = await vfs.readJSON(`${e.path}/manifest.json`); }
+      catch (err) { man = err.code === 'ENOENT' || err instanceof SyntaxError ? null : prev.find(m => m.ref === ref) || null; }
+      if (man) local.push({ ...man, kind: man.kind || kind, id: man.id || e.name, dir: e.path, ref });
     }
   }
   local.sort((a, b) => (b.added || 0) - (a.added || 0));

@@ -292,11 +292,13 @@ export class ForgeHost {
         if (step % evalEvery === 0 || step === total) {
           if (val.length) { const vl = await this.valLoss(m, val); const vm = { step, val_loss: vl, t: Date.now() }; metricsBuf.push(JSON.stringify(vm) + '\n'); emit({ type: 'eval', ...vm }); }
           for (const p of samplePrompts) {
-            const ids = tok.encode(p);
-            const out = await m.generate(ids, { maxNew: c.sampleTokens || 96, temperature: 0.7, stop: [...tok.eos] });
-            const s = { step, prompt: p.slice(-300), text: tok.decode(out, { skipSpecial: true }) };
-            emit({ type: 'sample', ...s });
-            await vfs.append(`${runDir}/samples.jsonl`, JSON.stringify(s) + '\n');
+            try {
+              const ids = tok.encode(p);
+              const out = await m.generate(ids, { maxNew: c.sampleTokens || 96, temperature: 0.7, stop: [...tok.eos] });
+              const s = { step, prompt: p.slice(-300), text: tok.decode(out, { skipSpecial: true }) };
+              emit({ type: 'sample', ...s });
+              await vfs.append(`${runDir}/samples.jsonl`, JSON.stringify(s) + '\n');
+            } catch (e) { emit({ type: 'warn', text: `Sample generation failed: ${e.message || e}` }); }
           }
           await flushMetrics();
         }
