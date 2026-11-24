@@ -1,8 +1,8 @@
 {
- "version": "9bd27f5247be",
- "built": "2026-11-24T03:11:01.483Z",
+ "version": "e6ce97004c66",
+ "built": "2026-11-24T03:19:02.784Z",
  "bytes": {
-  "core": 2284437,
+  "core": 2333937,
   "engines": 65272893
  },
  "core": [
@@ -39,6 +39,9 @@
   "src/core/store.js",
   "src/core/util.js",
   "src/core/vfs.js",
+  "src/forge/gpu.js",
+  "src/forge/kernels.js",
+  "src/forge/ops.js",
   "src/main.js",
   "src/models/anthropic.js",
   "src/models/catalog.js",
@@ -87,6 +90,7 @@
   "src/ui/session/submit.js",
   "src/ui/session/transcript.js",
   "src/ui/settings/settings-view.js",
+  "src/ui/studio/datasets-panel.js",
   "src/ui/studio/models-panel.js",
   "src/ui/studio/studio-view.js",
   "src/workers/media.worker.js",

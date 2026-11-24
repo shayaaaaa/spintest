@@ -53,9 +53,10 @@ export class GPU {
   release(b) {
     if (!b) return;
     if (b._pooled) { if (!this.pool.has(b._size)) this.pool.set(b._size, []); this.pool.get(b._size).push(b); }
-    else { this.allocated -= b._size || 0; b.destroy(); }
+    else this.free(b);
   }
-  free(b) { if (!b) return; this.allocated -= b._size || 0; b.destroy(); }
+  // Destroying a buffer that unsubmitted commands use would invalidate the whole batch, so wait for the next submit.
+  free(b) { if (!b) return; this.allocated -= b._size || 0; if (this.enc) (this.deferred ||= []).push(b); else b.destroy(); }
   trimPool() { this.flush(); for (const list of this.pool.values()) for (const b of list) { this.allocated -= b._size; b.destroy(); } this.pool.clear(); }
 
   upload(buf, data, offset = 0) {
@@ -130,6 +131,7 @@ export class GPU {
   flush() {
     this.endPass();
     if (this.enc) { this.device.queue.submit([this.enc.finish()]); this.enc = null; }
+    if (this.deferred?.length) { for (const b of this.deferred) b.destroy(); this.deferred = []; }
   }
   async sync() { this.flush(); await this.device.queue.onSubmittedWorkDone(); }
 }

@@ -377,7 +377,7 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
 }`;
 
 // ---------- cross entropy over a chunk of logit rows [R][V] ----------
-// out: LP[r] = log p(label) (0 if ignored), LSE[r]; if coef[r] != 0, logits row becomes coef * (softmax - onehot).
+// out: LP[r] = log p(label) (0 if ignored); the logits row becomes coef[r] * (softmax - onehot) (zeros when coef is 0).
 export const XENT = `
 struct P { R: u32, V: u32, pad0: u32, pad1: u32 };
 @group(0) @binding(0) var<storage, read_write> L: array<f32>;
@@ -408,12 +408,10 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<
   if (lid.x == 0u) { if (lab >= 0) { LP[r] = L[b + u32(lab)] - lse; } else { LP[r] = 0.0; } }
   workgroupBarrier();
   let c = COEF[r];
-  if (c != 0.0) {
-    for (var j = lid.x; j < p.V; j = j + 256u) {
-      var g = exp(L[b + j] - lse);
-      if (i32(j) == lab) { g = g - 1.0; }
-      L[b + j] = c * g;
-    }
+  for (var j = lid.x; j < p.V; j = j + 256u) {
+    var g = exp(L[b + j] - lse);
+    if (i32(j) == lab) { g = g - 1.0; }
+    L[b + j] = c * g;
   }
 }`;
 
