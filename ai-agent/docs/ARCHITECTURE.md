@@ -87,15 +87,57 @@ tolerant parser; cloud uses native tool APIs.
 
 ## Forge engine (training)
 
-- Tensors in GPU storage buffers, f32 compute; weights may be stored as packed f16 (`unpack2x16float`, core WGSL, so no
-  shader-f16 requirement) or 4-bit (NF4/int4 group quant) for QLoRA.
-- Tape autograd; kernels: matmul (tiled), rmsnorm, rope, causal attention, swiglu, embedding (+atomic CAS scatter-add),
-  fused cross-entropy (chunked vocab), AdamW, grad norm/clip, LoRA.
-- Architectures: Llama family (Llama 2/3, SmolLM2, Qwen2/2.5, Qwen3 with q/k norm, Mistral).
-- Methods: SFT (full/LoRA/QLoRA), continued pretrain, pretrain from scratch (+ in-browser BPE tokenizer training), DPO
-  (reference = adapters off), GRPO (group sampling, JS reward functions, KL to reference).
-- Checkpoints every N steps; resume; export PEFT adapter, merged safetensors, GGUF (f16/q8_0).
-- Verified against PyTorch reference outputs (tests/forge).
+Files in `src/forge/`:
+- `gpu.js`: device with the adapter's max limits, a buffer pool, a ring of uniform slots, and batched command encoding.
+  Frees are deferred until submit. CPU-emulated adapters are detected, which disables split-K.
+- `kernels.js` / `ops.js`: WGSL kernels and their wrappers.
+  - Matmul: tiled 64×64, strided and batched (covers NN/NT/TN and GQA), plus split-K for long-K/small-output products.
+  - GEMV: 16 rows × 4 lanes.
+  - Row ops: RMSNorm fwd/bwd, causal softmax fwd/bwd, fused cross-entropy (per-row coefficients so SFT, DPO and GRPO
+    share one kernel).
+  - Others: RoPE (rotate-half; inverse for backward), SwiGLU fwd/bwd, embedding gather plus atomic-CAS scatter-add,
+    AdamW, sum of squares.
+  - Weights stay f32 for compute but can be stored as packed f16 (`unpack2x16float`, no shader-f16 needed) or NF4 with
+    per-64 scales (QLoRA).
+- `model.js`: Llama-family transformer (Llama 2/3 incl. llama3 RoPE scaling, SmolLM2, Mistral, Qwen2 biases, Qwen3
+  QK-norm).
+  - Training: activation checkpointing (keeps only each layer's input and recomputes in backward), hand-written
+    backward per layer, chunked LM head/cross-entropy.
+  - Inference: a KV cache with prefix reuse.
+  - Parameters are named with HF/PEFT tensor names.
+- `tokenizer.js`: HF tokenizers via transformers.js (chat templates), a streaming detokenizer, and a byte-level BPE
+  trainer for from-scratch models.
+- `data.js`: dataset shapes → labeled sequences. Assistant-only masking via template prefixes; packing for text.
+- `rewards.js`: built-in GRPO rewards. Custom JavaScript rewards run in the sandbox iframe via the main thread.
+- `host.js`: loading, generation, evaluation, benchmark, the training loop and exports.
+  - Loop: LR warmup + cosine, gradient accumulation, clipping, checkpoints every N steps, resume, eval/samples.
+  - SFT/pretrain/scratch: token-averaged CE.
+  - DPO: −log σ(β·Δ) with reference log-probs precomputed (adapters off).
+  - GRPO: group sampling, normalized advantages, k3 KL to the adapters-off reference.
+- `export.js`: PEFT adapter config, HF→GGUF names (Q/K permutation for the llama arch), GGUF v3 writer (F32/F16/Q8_0,
+  llama.cpp tokenizer metadata, chat template, llama3 `rope_freqs`).
+- `client.js` + `src/workers/forge.worker.js`: the engine runs in a worker (main-thread fallback when workers lack
+  WebGPU). `ForgeChatEngine` lets the model registry chat with Forge models.
+- `jobs.js`: run records, the live-progress store, the memory/time estimator (measured GFLOPS), and
+  start/pause/resume/export.
+- `offload.js`: one generated Unsloth/TRL `train.py` for Colab (.ipynb), HF Jobs (REST API), RunPod/Modal (zip) and a
+  companion FastAPI server.
+
+Verification:
+- Kernels vs JS references (`tests/forge-kernels.mjs`).
+- Whole-model forward, KV cache and every parameter's gradient vs finite differences on tiny Llama/Qwen2/Qwen3
+  (`tests/forge-model.mjs`).
+- End to end on SmolLM2-135M, with merged/GGUF exports checked in Forge and llama.cpp (`tests/forge-train.mjs`).
+
+## Shell runtimes
+
+- `src/shell/jsh.js`: POSIX-like shell over the Hub (pipes, redirects, globbing, coreutils-style commands).
+- `src/runtimes/python.js`: Pyodide in a worker. `pip install` uses the Pyodide distribution, plus micropip.
+- `src/runtimes/git.js`: isomorphic-git over an OPFS `fs.promises` adapter. Network goes through the user's proxy or
+  the isomorphic-git CORS proxy; tokens come from Settings → Keys.
+- `src/runtimes/linux.js`: Alpine Linux (official x86 *virt* ISO, SHA-256 verified) in v86, driven over the serial
+  console with exit-status markers. A snapshot after first boot makes later starts take seconds. `--put`/`--get`
+  move files between the Hub and the VM.
 
 ## Testing environment notes
 

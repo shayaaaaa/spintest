@@ -89,6 +89,7 @@ input[type=checkbox] { accent-color: var(--accent); width: 18px; height: 18px; }
 .card { background: var(--bg-1); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; }
 .card + .card { margin-top: 10px; }
 .card-title { font-weight: 650; margin-bottom: 6px; display: flex; align-items: center; gap: 8px; }
+.card-title > svg { width: 18px; height: 18px; flex: none; color: var(--accent); }
 .list { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-1); overflow: hidden; }
 .li { display: flex; align-items: center; gap: 10px; padding: 10px 12px; min-height: 48px; border-bottom: 1px solid var(--border); background: none; border-left: 0; border-right: 0; border-top: 0; width: 100%; text-align: left; color: var(--text); }
 .li:last-child { border-bottom: 0; }
@@ -170,6 +171,7 @@ button.li:hover, .li.clickable:hover { background: var(--bg-hover); }
 .subtab { border: 0; background: none; color: var(--text-3); font-weight: 650; font-size: 14px; padding: 6px 12px; border-radius: 9px; white-space: nowrap; display: inline-flex; gap: 6px; align-items: center; }
 .subtab svg { width: 16px; height: 16px; }
 .subtab.on { color: var(--text); background: var(--bg-2); }
+@container (max-width: 520px) { .subtab svg { display: none; } .subtab { padding: 6px 9px; font-size: 13.5px; } .subtabs { gap: 2px; } }
 
 /* diff block (shared by agent + code) */
 .diff { font: 12.5px/1.5 var(--mono); border: 1px solid var(--border); border-radius: 8px; overflow: auto; background: var(--code-bg); max-height: 420px; }

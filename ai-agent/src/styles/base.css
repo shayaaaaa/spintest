@@ -159,6 +159,8 @@ kbd { font: var(--fs-xs) var(--mono); padding: 1px 5px; border: 1px solid var(--
   -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
   position: relative; z-index: 4;
 }
+/* Default icon size: any container without its own svg rule gets an 18px icon (never the full container width). */
+.icon { width: 18px; height: 18px; flex: none; }
 .phead-title { font-weight: 650; font-size: 15.5px; letter-spacing: -.01em; display: flex; align-items: center; gap: 6px; min-width: 0; }
 .phead-sub { color: var(--text-3); font-size: var(--fs-xs); font-weight: 500; }
 .pbody { flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative; }

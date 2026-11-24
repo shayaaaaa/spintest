@@ -1,5 +1,5 @@
 /* ---------- Studio tab ---------- */
-.studio { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.studio { flex: 1; display: flex; flex-direction: column; min-height: 0; container-type: inline-size; }
 .studio-scroll { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
 .mcard { display: flex; gap: 12px; align-items: flex-start; padding: 12px; border: 1px solid var(--border); border-radius: 14px; background: var(--bg-1); }
 .mcard + .mcard { margin-top: 8px; }
@@ -28,4 +28,4 @@
 .arena-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .arena-col { border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
 .arena-col.won { border-color: color-mix(in srgb, var(--ok) 60%, transparent); background: color-mix(in srgb, var(--ok) 7%, transparent); }
-@media (max-width: 520px) { .arena-grid { grid-template-columns: 1fr; } }
+@container (max-width: 520px) { .arena-grid { grid-template-columns: 1fr; } }

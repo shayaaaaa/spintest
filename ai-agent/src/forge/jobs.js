@@ -188,7 +188,7 @@ export async function startRun(i) {
     beta: i.beta ?? null, group: i.group || 4, maxNew: i.maxNew || 256, temperature: i.temperature ?? 0.9,
     reward: i.reward && !/[({;=]/.test(i.reward) ? i.reward : (i.reward ? null : 'exact'), rewardCode: i.rewardCode || (i.reward && /[({;=]/.test(i.reward) ? i.reward : null),
     size: i.size || 'micro', vocabSize: i.vocabSize || 0, completionOnly: i.completionOnly !== false, thinking: i.thinking ?? null, seed: i.seed || 1,
-    samplePrompts: i.samplePrompts || null, saveOptimizer: i.saveOptimizer !== false,
+    samplePrompts: i.samplePrompts || null, sampleTokens: i.sampleTokens || 0, saveOptimizer: i.saveOptimizer !== false,
   };
   for (const k of Object.keys(config)) if (config[k] === null || config[k] === 0) delete config[k];
   const run = { id, name, method, tuning, baseRef: base?.ref || null, baseDir: base?.dir || null, baseRepo: base?.source?.repo || null, baseName: base?.name || (method === 'scratch' ? `New ${i.size || 'micro'} model` : null), dataset: i.dataset, config, created: Date.now(), updated: Date.now(), state: 'queued', step: 0, total: 0, dir };
@@ -254,7 +254,7 @@ export async function deleteRun(id) {
 // Loads the run's model (base + latest checkpoint) for quick chats inside Studio.
 export async function chatWithRun(id, messages, { onToken, maxTokens = 256, temperature = 0.7 } = {}) {
   const run = runsStore.get().runs.find(r => r.id === id);
-  await rpc('runModel', run);
+  await rpc('loadRun', run);
   const stream = uid('rc');
   const off = forgeEvents.on('event', (e) => { if (e.type === 'token' && e.stream === stream) onToken?.(e.text); });
   try { return await rpc('generate', { messages, maxTokens, temperature }, stream); } finally { off(); }

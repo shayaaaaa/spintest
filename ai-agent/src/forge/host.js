@@ -477,8 +477,11 @@ export class ForgeHost {
   }
 
   // ---------- export ----------
-  // Ensures the run's trained model is loaded (base + checkpoint) and returns it.
-  async runModel(run) {
+  // RPC: loads a run's trained model for chatting; returns a plain description.
+  async loadRun(run) { await this._runModel(run); return { key: this.cur.key, ...this.describe() }; }
+
+  // Ensures the run's trained model is loaded (base + checkpoint) and returns it (internal: holds GPU objects).
+  async _runModel(run) {
     if (this.cur?.key === 'run:' + run.id) return this.cur;
     if (this.job) throw new Error('A training run is active.');
     const ckpt = await latestCheckpoint(run.dir);
@@ -544,7 +547,7 @@ export class ForgeHost {
 
   // what: 'adapter' | 'merged' | 'gguf'. Returns {dir, files}.
   async exportRun({ run, what, name, ggufType = 'q8_0', dtype = 'BF16' }) {
-    const cur = await this.runModel(run);
+    const cur = await this._runModel(run);
     const { m, cfg, hf, tok } = cur;
     const st = (t, p) => this.emit({ type: 'export', run: run.id, what, text: t, progress: p });
     const safe = String(name || `${run.name || run.id}`).replace(/[^\w.-]+/g, '-');

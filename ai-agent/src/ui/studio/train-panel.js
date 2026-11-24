@@ -75,6 +75,8 @@ function NewRun({ onStarted, onCancel }) {
   const [est, setEst] = useState(null);
   const [estErr, setEstErr] = useState(null);
   const gflops = useStore(settings, s => s.forge?.gflops);
+  // Measure this GPU once (a second or two) so time estimates are real.
+  useEffect(() => { if (!settings.get().forge?.gflops && navigator.gpu && !runsStore.get().active) benchmark().catch(() => {}); }, []);
   useEffect(() => { if (estReq.method !== 'pretrain' && estReq.base !== 'scratch' && !estReq.base) { setEst(null); return; } estimate(estReq).then(e => { setEst(e); setEstErr(null); }).catch(e => { setEst(null); setEstErr(String(e.message || e)); }); }, [JSON.stringify(estReq), gflops]);
   const ds = datasets.find(d => d.name === f.dataset);
   const steps = f.maxSteps ? +f.maxSteps : ds ? Math.ceil((ds.count || 0) * (+f.epochs || 1) / Math.max(1, +f.batch || 1)) : null;

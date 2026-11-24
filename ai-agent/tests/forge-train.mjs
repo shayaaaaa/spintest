@@ -76,7 +76,7 @@ if (want('sft')) {
 
   const sft = await page.evaluate(async (ref) => {
     const jobs = await import('./src/forge/jobs.js');
-    const { id } = await jobs.startRun({ method: 'lora', base: ref, dataset: 'forge-test-sft', name: 'secret', maxSteps: 16, batch: 2, lr: 3e-3, rank: 8, seqLen: 128, saveEvery: 8, evalEvery: 8 });
+    const { id } = await jobs.startRun({ method: 'lora', base: ref, dataset: 'forge-test-sft', name: 'secret', maxSteps: 10, batch: 2, lr: 3e-3, rank: 8, seqLen: 128, saveEvery: 5, evalEvery: 100, sampleTokens: 24 });
     const { run, live } = await waitRun(id);
     return { id, state: run.state, error: run.error, first: live.metrics[0]?.loss, last: live.metrics.at(-1)?.loss, samples: live.samples.map(s => s.text), steps: live.metrics.length };
   }, ref);
@@ -134,7 +134,7 @@ if (want('dpo')) {
     const rows = ['Greet me.', 'Say hello.', 'Hi!', 'Give me a greeting.'].map(p => ({ prompt: p, chosen: 'Ahoy, matey! Welcome aboard!', rejected: 'Hello. How can I help you today?' }));
     await ds.createDataset('forge-test-dpo', { type: 'dpo', rows });
     const jobs = await import('./src/forge/jobs.js');
-    const { id } = await jobs.startRun({ method: 'dpo', base: ref, dataset: 'forge-test-dpo', maxSteps: 8, batch: 2, lr: 1e-3, rank: 8, beta: 0.1, seqLen: 96 });
+    const { id } = await jobs.startRun({ method: 'dpo', base: ref, dataset: 'forge-test-dpo', maxSteps: 4, batch: 2, lr: 2e-3, rank: 8, beta: 0.1, seqLen: 96, evalEvery: 100 });
     const { run, live } = await waitRun(id);
     return { state: run.state, error: run.error, first: live.metrics[0], last: live.metrics.at(-1) };
   }, ref);
@@ -150,7 +150,7 @@ if (want('grpo')) {
     await ds.createDataset('forge-test-grpo', { type: 'grpo', rows: [{ prompt: 'What is 2+3? Answer with a number.', answer: '5' }, { prompt: 'What is 4+4? Answer with a number.', answer: '8' }] });
     const jobs = await import('./src/forge/jobs.js');
     // Custom JS reward through the sandbox: shorter answers score higher.
-    const { id } = await jobs.startRun({ method: 'grpo', base: ref, dataset: 'forge-test-grpo', maxSteps: 2, batch: 1, group: 3, maxNew: 12, lr: 1e-4, rank: 8, rewardCode: 'function reward(c, row) { return (c.includes(row.answer) ? 1 : 0) - c.length / 200; }' });
+    const { id } = await jobs.startRun({ method: 'grpo', base: ref, dataset: 'forge-test-grpo', maxSteps: 2, batch: 1, group: 3, maxNew: 12, lr: 1e-4, rank: 8, sampleTokens: 16, rewardCode: 'function reward(c, row) { return (c.includes(row.answer) ? 1 : 0) - c.length / 200; }' });
     const { run, live } = await waitRun(id);
     return { state: run.state, error: run.error, metrics: live.metrics, rollouts: live.rollouts.length, sample: live.rollouts[0]?.completions?.map(c => [c.text.slice(0, 40), c.reward]) };
   }, ref);

@@ -45,7 +45,8 @@ export function OffloadPanel() {
         <datalist id="offload-bases">${suggestions.map(s => html`<option value=${s} />`)}</datalist>
         <div class="help">Unsloth's pre-quantized repos (…-bnb-4bit) download faster. Gated models (Llama) need an HF token with access.</div></div>
       <div class="field"><label>Tuning</label><${Seg} block value=${f.tuning} onChange=${v => set('tuning', v)} options=${[{ value: 'lora', label: 'LoRA' }, { value: 'qlora', label: 'QLoRA' }, { value: 'full', label: 'Full' }]} /></div>
-      <div class="field"><label>Dataset</label><select class="input select" value=${f.dataset} onChange=${e => set('dataset', e.target.value)}>${datasets.map(d => html`<option value=${d.name}>${d.name} · ${d.type || 'sft'} · ${d.count ?? 0} rows</option>`)}</select></div>
+      <div class="field"><label>Dataset</label>${datasets.length ? html`<select class="input select" value=${f.dataset} onChange=${e => set('dataset', e.target.value)}>${datasets.map(d => html`<option value=${d.name}>${d.name} · ${d.type || 'sft'} · ${d.count ?? 0} rows</option>`)}</select>`
+        : html`<${Banner} icon="dataset">No datasets yet. <button class="btn sm" style="margin-left:6px" onClick=${() => import('../../core/bus.js').then(m => m.bus.emit('studio-tab', 'datasets'))}>Create one</button><//>`}</div>
       <div class="form-grid">
         <div class="field"><label>Epochs</label><input class="input" type="number" step="0.1" value=${f.epochs} onInput=${e => set('epochs', e.target.value)} /></div>
         <div class="field"><label>Max steps</label><input class="input" type="number" placeholder="auto" value=${f.maxSteps || ''} onInput=${e => set('maxSteps', e.target.value)} /></div>
