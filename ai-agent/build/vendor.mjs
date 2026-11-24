@@ -108,15 +108,21 @@ copy('@xterm/xterm/css/xterm.css', 'xterm.css');
   let code = fs.readFileSync(src, 'utf8');
   const needle = 'function getCacheOptions(appConfig) {\n    const options = {\n        cacheType: getCacheBackend(appConfig),\n    };';
   if (!code.includes(needle)) throw new Error('web-llm patch point not found');
-  code = code.replace(needle, needle + '\n    if (appConfig.artifactCache !== undefined) { options.artifactCache = appConfig.artifactCache; }');
+  code = code.replace(needle, needle + '\n    if (appConfig.artifactCache !== undefined) { options.artifactCache = appConfig.artifactCache; }\n    else if (appConfig.useHubCache && globalThis.__aiAgentArtifactCache) { options.artifactCache = globalThis.__aiAgentArtifactCache; }');
   const patched = path.join(tmp, 'web-llm.patched.js');
   fs.writeFileSync(patched, code);
   await bundle('web-llm', `export * from ${JSON.stringify(patched)};`);
 }
 
+// Anthropic SDK (cloud models; used with dangerouslyAllowBrowser and the user's own key, stored only on the device)
+await bundle('anthropic', `export { default as Anthropic } from '@anthropic-ai/sdk';`, { mainFields: ['browser', 'module', 'main'], conditions: ['browser', 'import'] });
+
 // wllama (llama.cpp in WebAssembly, runs any GGUF on the CPU)
 await bundle('wllama', `export * from '@wllama/wllama';`);
 copy('@wllama/wllama/esm/wasm/wllama.wasm', 'wllama/wllama.wasm');
+// Safari lacks JSPI/Memory64, so it uses the compat build (still WebGPU-accelerated).
+copy('@wllama/wllama-compat/wasm/wllama.js', 'wllama/compat/wllama.js');
+copy('@wllama/wllama-compat/wasm/wllama.wasm', 'wllama/compat/wllama.wasm');
 
 // transformers.js (ONNX Runtime Web): embeddings, Whisper, TTS, vision. onnxruntime wasm files are loaded from vendor/ort.
 await bundle('transformers', `export * from '@huggingface/transformers';`, {

@@ -8,6 +8,7 @@
     "test": "node ../tests/run.mjs"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "1.7.0",
     "@codemirror/autocomplete": "6.19.0",
     "@codemirror/commands": "6.9.0",
     "@codemirror/lang-cpp": "6.0.3",
@@ -31,6 +32,7 @@
     "@huggingface/transformers": "3.8.1",
     "@mlc-ai/web-llm": "0.2.87",
     "@wllama/wllama": "3.13.0",
+    "@wllama/wllama-compat": "3.13.0",
     "@xterm/addon-fit": "0.10.0",
     "@xterm/xterm": "5.5.0",
     "buffer": "^6.0.3",

@@ -1,9 +1,9 @@
 {
- "version": "b7052d5fef66",
- "built": "2026-11-24T01:51:55.824Z",
+ "version": "b3692a89224e",
+ "built": "2026-11-24T02:02:35.072Z",
  "bytes": {
-  "core": 1799158,
-  "engines": 45966816
+  "core": 1892205,
+  "engines": 65272893
  },
  "core": [
   "icons/icon-180.png",
@@ -15,12 +15,28 @@
   "src/core/hub-defaults.js",
   "src/core/hub.js",
   "src/core/markdown.js",
+  "src/core/net.js",
   "src/core/platform.js",
   "src/core/settings.js",
   "src/core/store.js",
   "src/core/util.js",
   "src/core/vfs.js",
   "src/main.js",
+  "src/models/anthropic.js",
+  "src/models/catalog.js",
+  "src/models/content.js",
+  "src/models/downloader.js",
+  "src/models/embeddings.js",
+  "src/models/hf.js",
+  "src/models/local/hub-cache.js",
+  "src/models/local/tjs.js",
+  "src/models/local/toolcall.js",
+  "src/models/local/webllm.js",
+  "src/models/local/wllama.js",
+  "src/models/openai.js",
+  "src/models/providers.js",
+  "src/models/registry.js",
+  "src/models/speech.js",
   "src/styles/app.css",
   "src/styles/base.css",
   "src/styles/components.css",
@@ -34,6 +50,7 @@
   "src/ui/layout.js",
   "src/ui/studio/studio-view.js",
   "src/workers/opfs-writer.worker.js",
+  "src/workers/webllm.worker.js",
   "vendor/codemirror.mjs",
   "vendor/markdown.mjs",
   "vendor/preact.mjs",
@@ -41,6 +58,7 @@
   "vendor/xterm.mjs"
  ],
  "engines": [
+  "vendor/anthropic.mjs",
   "vendor/katex.mjs",
   "vendor/katex/fonts/KaTeX_AMS-Regular.woff2",
   "vendor/katex/fonts/KaTeX_Caligraphic-Bold.woff2",
@@ -75,6 +93,8 @@
   "vendor/v86/vgabios.bin",
   "vendor/web-llm.mjs",
   "vendor/wllama.mjs",
+  "vendor/wllama/compat/wllama.js",
+  "vendor/wllama/compat/wllama.wasm",
   "vendor/wllama/wllama.wasm"
  ]
 }
