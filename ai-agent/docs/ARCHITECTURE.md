@@ -129,6 +129,20 @@ Verification:
   (`tests/forge-model.mjs`).
 - End to end on SmolLM2-135M, with merged/GGUF exports checked in Forge and llama.cpp (`tests/forge-train.mjs`).
 
+## First-run setup
+
+`src/core/setup.js` installs everything once, automatically, a few seconds after the first launch:
+- **Steps:** offline engine cache (service worker), Linux VM (install + first boot), Python with numpy/pandas/matplotlib,
+  ffmpeg, the MiniLM search model, and the Agent/Chat GGUF (Qwen3 4B Instruct, or a smaller one if it doesn't fit
+  memory).
+- **Order:** the model download starts first and runs alongside the other steps.
+- **Records:** each finished step is recorded in settings (`setup.steps`) and never repeats; a failed step is retried
+  on the next launch, and the run waits for `online` when offline.
+- **UI:** `src/ui/setup-bar.js` shows progress (bar above the tabs plus a checklist sheet).
+- **Settings:** the Settings card can turn it off or reinstall anything missing (`runSetup({force:true})` checks real
+  presence instead of the flags).
+- **Linux:** once it is set up, jsh runs unknown commands in the VM (`linuxEnabled`), re-quoting arguments.
+
 ## Shell runtimes
 
 - `src/shell/jsh.js`: POSIX-like shell over the Hub (pipes, redirects, globbing, coreutils-style commands).

@@ -187,7 +187,7 @@ async function start(restore) {
   await waitFor(/__AIA_42_READY__\r?\n/, { timeout: 60000, from });
   await new Promise(r => setTimeout(r, 300)); // let the prompt settle before the snapshot
   setState({ text: 'Saving a snapshot for fast starts…' });
-  try { const st = await emu.save_state(); await vfs.write(`${DIR}/state.bin`, new Uint8Array(st), { silent: true }); }
+  try { const st = await emu.save_state(); await vfs.write(`${DIR}/state.bin`, new Uint8Array(st), { silent: true }); globalThis.__aiaLinuxPrepared = true; }
   catch (e) { console.warn('VM snapshot failed', e); }
 }
 
@@ -201,7 +201,8 @@ async function snapshotLooksValid() {
   return false;
 }
 
-export async function isPrepared() { return !!(await vfs.stat(`${DIR}/state.bin`).catch(() => null)); }
+// Also records a flag the shell reads synchronously: once Linux is set up, commands jsh doesn't know run in the VM.
+export async function isPrepared() { return (globalThis.__aiaLinuxPrepared = !!(await vfs.stat(`${DIR}/state.bin`).catch(() => null))); }
 
 // Boots the VM once in the background so its snapshot exists (later starts take a second), then stops it again
 // unless the user started using it meanwhile. Gives up after two failed attempts so it never loops on every launch.

@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const FAST = [['smoke', []], ['forge-kernels', []], ['forge-model', []], ['runtimes', ['--only=git']]];
-const SLOW = [['models', []], ['agent', []], ['forge-train', []], ['runtimes', ['--only=linux']]];
+const SLOW = [['models', []], ['agent', []], ['forge-train', []], ['runtimes', ['--only=linux']], ['setup', []]];
 const args = process.argv.slice(2);
 const named = args.filter(a => !a.startsWith('--'));
 const suites = named.length ? [...FAST, ...SLOW].filter(([n]) => named.includes(n)) : args.includes('--all') ? [...FAST, ...SLOW] : FAST;

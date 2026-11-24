@@ -7,6 +7,7 @@ import { bus } from '../core/bus.js';
 import { Icon } from './icons.js';
 import { Overlays, Toasts, toast } from './kit.js';
 import { layout, TABS, showTab, focusPane, setSplit, persistSplit, isTwoPane } from './layout.js';
+import { SetupBar } from './setup-bar.js';
 
 const loaders = {
   agent: () => import('./agent/agent-view.js').then(m => m.AgentView),
@@ -66,6 +67,7 @@ export function App() {
   if (!two) {
     return html`<div class="shell"><div class="shell-main">
       <div class="panes"><div class="pane"><${PaneContent} tab=${L.single} pane="single" /></div></div>
+      ${!e.keyboard && html`<${SetupBar} />`}
       ${!e.keyboard && html`<nav class="tabbar">${TABS.map(t => html`<${TabButton} key=${t.id} t=${t} active=${L.single === t.id} onClick=${() => showTab(t.id)} />`)}</nav>`}
     </div></div><${Overlays} /><${Toasts} />`;
   }
@@ -84,7 +86,7 @@ export function App() {
       <div class="divider" onPointerDown=${startDrag} onDblClick=${() => { setSplit(0.5); persistSplit(); }} role="separator" aria-orientation="vertical"></div>
       <div class=${'pane' + (L.focus === 'right' ? ' focused' : '')} style=${`flex:${1 - L.split}`} onPointerDown=${() => L.focus !== 'right' && focusPane('right')}>
         <${PaneContent} tab=${L.right} pane="right" /></div>
-    </div></div>
+    </div><${SetupBar} /></div>
   </div><${Overlays} /><${Toasts} />`;
 }
 

@@ -21,16 +21,22 @@ panes and a single pane.
    `main`, folder `/ (root)`. After a minute it's live at `https://<your-user>.github.io/<repo>/ai-agent/`.
 2. On the iPhone, open that address in **Safari**.
 3. Tap **Share → Add to Home Screen**. Launch it from the Home Screen icon: it opens full screen and works offline.
-4. First launch:
-   - The app asks iOS to keep its storage (Settings → Storage & offline shows the result), so iOS doesn't evict your
-     models.
-   - The **Linux VM** sets itself up in the background (the official Alpine Linux image ships with the app in
-     `ai-agent/runtimes/`, 49 MB). It installs, then boots once to save a snapshot (about a minute, one time). After
-     the "Linux VM ready" notice, type `linux` in the Code tab's terminal: it starts in about a second, offline too.
-   - **Studio → Models**: download a model. *Qwen3 4B Instruct* (2.5 GB) is the recommended agent model. For training,
-     download one from **For training** (e.g. *SmolLM2 360M* or *Qwen2.5 0.5B*).
-   - Optional: **Settings → Keys** for cloud models (Anthropic, OpenAI-compatible), a Hugging Face token (private repos,
-     uploads, HF Jobs) and a GitHub token (git push).
+4. First launch: **nothing to do.** Ai Agent sets itself up in the background; a slim bar above the tabs shows the
+   progress (tap it for the checklist). You can use the app meanwhile. It installs, once:
+   - the app files for full offline use (65 MB)
+   - the **Linux VM** (official Alpine Linux image shipped in `ai-agent/runtimes/`, 49 MB) including its one-time
+     first boot. After that, any command the built-in shell doesn't have (`gcc`, `vi`, `apk`, `top`…) runs in Linux
+     automatically, for you and for the agent, starting in about a second.
+   - **Python** with numpy, pandas and matplotlib, and **ffmpeg** for audio/video
+   - the **search model** for memory and knowledge search (23 MB)
+   - the **Agent & Chat model**, Qwen3 4B Instruct (2.5 GB, or a smaller one if the device has less memory)
+
+   "Ai Agent is ready" appears when everything is installed. If the app closes or the network drops, setup continues
+   by itself the next time it opens. Settings → Storage & offline → *Automatic setup* shows the status, turns it off,
+   or installs anything you removed. The app also asks iOS to keep its storage, so models aren't evicted.
+
+   Optional: **Settings → Keys** for cloud models (Anthropic, OpenAI-compatible), a Hugging Face token (private repos,
+   uploads, HF Jobs) and a GitHub token (git push).
 5. Keep the app in the foreground while downloading or training: iOS pauses web apps in the background. Downloads and
    training runs resume from where they stopped.
 

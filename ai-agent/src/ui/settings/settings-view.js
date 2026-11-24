@@ -14,6 +14,8 @@ import * as vfs from '../../core/vfs.js';
 import { bus } from '../../core/bus.js';
 import { systemVoices, speak } from '../../models/speech.js';
 import { linuxStore } from '../../runtimes/linux.js';
+import { setupStore, runSetup } from '../../core/setup.js';
+import { SetupList } from '../setup-bar.js';
 
 const SECTIONS = [
   { id: 'models', label: 'Models & keys', icon: 'cpu' },
@@ -223,12 +225,26 @@ function Storage() {
     <div class="card"><div class="card-title">Offline engines</div>
       <div class="small dim">The app itself (${manifest ? fmtBytes(manifest.bytes.core) : '…'}) is always cached. Engines (${manifest ? fmtBytes(manifest.bytes.engines) : '…'}: llama.cpp, WebLLM, ONNX, office, PDF, Linux) are cached when first used, or all at once here.</div>
       ${cache && !cache.finished ? html`<div style="margin-top:10px"><${Progress} value=${cache.done} max=${cache.total} /></div>` : html`<button class="btn" style="margin-top:10px" onClick=${cacheEngines}><${Icon} name="download" />${cache?.finished ? 'Refresh offline engines' : 'Make everything available offline'}</button>`}</div>
+    <${AutoSetup} />
     <${Runtimes} />
     <div class="card"><div class="card-title">Back up</div>
       <div class="small dim">Export memory, skills, tools, agents, knowledge, datasets, chats, settings (without API keys) and projects as a .zip.</div>
       <div class="row" style="margin-top:10px"><button class="btn" onClick=${exportHub}><${Icon} name="download" />Export Hub</button><button class="btn" onClick=${importHub}><${Icon} name="upload" />Import</button></div></div>
     <div class="card"><div class="card-title" style="color:var(--err)">Danger zone</div>
       <button class="btn danger" onClick=${async () => { if (await confirmDialog({ title: 'Delete everything?', message: 'This erases the whole Hub on this phone: models, memory, projects, settings and keys.', ok: 'Erase', danger: true })) { await vfs.rm('/', {}).catch(async () => { for (const e of await vfs.list('/')) await vfs.rm(e.path); }); location.reload(); } }}><${Icon} name="trash" />Erase Hub</button></div>`;
+}
+
+function AutoSetup() {
+  const s = useStore(setupStore);
+  const auto = useStore(settings, x => x.setup?.auto !== false);
+  const completed = useStore(settings, x => x.setup?.completed);
+  return html`<div class="card"><div class="card-title">Automatic setup</div>
+    <div class="small dim">On first launch Ai Agent installs everything it needs by itself: offline app files, the Linux VM (with its first boot), Python, ffmpeg, the search model and the Agent & Chat model. Anything missing is picked up on the next launch.</div>
+    ${s.running ? html`<div style="margin-top:10px"><${SetupList} /></div>`
+      : completed ? html`<div class="small ok" style="margin-top:8px">✓ Everything installed (${new Date(completed).toLocaleDateString()})</div>`
+      : html`<div class="small warn" style="margin-top:8px">Not finished yet: it continues automatically when the app opens online.</div>`}
+    <div class="row wrap" style="margin-top:10px;align-items:center"><${Toggle} on=${auto} onChange=${v => setSetting('setup.auto', v)} label="Install automatically" />
+      ${!s.running && html`<button class="btn sm" onClick=${() => runSetup({ force: true })}><${Icon} name="refresh" />Install anything missing</button>`}</div></div>`;
 }
 
 // Downloadable runtimes kept in Hub/runtimes (each is fetched once, then works offline).

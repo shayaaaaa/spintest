@@ -42,9 +42,13 @@ export function createShell({ cwd = '/workspace', session } = {}) {
     },
     async linux(argv, io, shell, ctx) {
       const { linuxRun } = await import('../runtimes/linux.js');
-      return linuxRun(argv.join(' '), { io, cwd: shell.cwd, signal: ctx.signal });
+      // Re-quote arguments so spaces and special characters reach the VM's shell unchanged.
+      const q = (a) => /^[\w@%+=:,./-]+$/.test(a) ? a : `'${String(a).replace(/'/g, `'\\''`)}'`;
+      const cmd = argv[0]?.startsWith('--') ? argv.join(' ') : argv.map(q).join(' ');
+      return linuxRun(cmd, { io, cwd: shell.cwd, signal: ctx.signal });
     },
-    linuxEnabled: () => !!globalThis.__aiaLinuxReady,
+    // Once the Linux VM is set up, any command jsh doesn't have (gcc, apk, vi, top…) runs there automatically.
+    linuxEnabled: () => !!(globalThis.__aiaLinuxReady || globalThis.__aiaLinuxPrepared),
     async git(args, io, shell, ctx) {
       const { gitCommand } = await import('../runtimes/git.js');
       return gitCommand(args, io, shell, ctx);

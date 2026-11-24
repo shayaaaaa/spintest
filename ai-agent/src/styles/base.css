@@ -237,3 +237,16 @@ kbd { font: var(--fs-xs) var(--mono); padding: 1px 5px; border: 1px solid var(--
 :root[data-theme="light"] .hljs-type, :root[data-theme="light"] .hljs-title.class_ { color: #0e7490; }
 
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
+
+/* automatic first-run setup */
+.setup-bar { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; padding: 7px 12px; border: 0; border-top: 1px solid var(--border); background: var(--bg-1); color: var(--text-2); font-size: 12.5px; text-align: left; overflow: hidden; flex: none; }
+.setup-bar b { color: var(--text); font-weight: 650; }
+.setup-pct { font-variant-numeric: tabular-nums; color: var(--text-3); font-weight: 600; }
+.setup-bar-progress { position: absolute; left: 0; bottom: 0; height: 2px; background: var(--accent); transition: width .4s; }
+.setup-list { display: flex; flex-direction: column; gap: 2px; }
+.setup-row { display: flex; gap: 10px; align-items: flex-start; padding: 8px 0; border-bottom: 1px solid var(--border); }
+.setup-row:last-child { border-bottom: 0; }
+.setup-ico { width: 20px; height: 20px; display: grid; place-items: center; flex: none; color: var(--text-4); margin-top: 1px; }
+.setup-ico.done, .setup-ico.skipped { color: var(--ok); }
+.setup-ico.error { color: var(--err); }
+.setup-label { font-weight: 600; font-size: 14px; }

@@ -76,21 +76,22 @@ async function boot() {
   if (q.get('share')) bus.emit('share', { title: q.get('title') || '', text: q.get('text') || '', url: q.get('url') || '' });
   if (q.get('shortcut-result')) bus.emit('shortcut-result', { id: q.get('id'), result: q.get('shortcut-result') });
   if (q.toString()) history.replaceState(null, '', location.pathname + location.hash);
-  // First launch: install the Linux VM that ships with the app (49 MB) and run its one-time first boot in the
-  // background, so `linux` in the terminal starts in about a second from then on. Runs again only if unfinished.
+  // First launch: install everything the app needs automatically (offline files, Linux VM with its first boot,
+  // Python, ffmpeg, the search model and the Agent/Chat model). Only missing pieces run on later launches.
+  import('./runtimes/linux.js').then(L => L.isPrepared()).catch(() => {});
   setTimeout(async () => {
     try {
-      const linux = await import('./runtimes/linux.js');
-      if (await linux.isPrepared()) return;
+      const { runSetup } = await import('./core/setup.js');
       const { toast } = await import('./ui/kit.js');
-      const msg = {
-        installing: 'Installing the Linux VM in the background (49 MB, one time)…',
-        preparing: 'Setting up the Linux VM: first boot in the background (one time, about a minute)…',
-        ready: 'Linux VM ready. Type linux in the Code tab terminal: it starts in a second, offline too.',
-      };
-      await linux.autoSetup({ onStage: (st) => toast(msg[st], st === 'ready' ? 'ok' : 'info', st === 'ready' ? 6000 : 4000) });
-    } catch (e) { console.warn('Linux VM setup did not finish; it continues on the next launch or from Settings → Storage & offline', e); }
-  }, 6000);
+      const offS = bus.on('setup-started', () => toast('Setting up Ai Agent: installing everything it needs in the background. You can keep using the app.', 'info', 6000));
+      const offF = bus.on('setup-finished', ({ failed }) => {
+        offS(); offF();
+        if (!failed.length) toast('Ai Agent is ready: everything is installed and works offline.', 'ok', 7000);
+        else toast('Setup paused (network or storage). It continues automatically next time the app opens.', 'warn', 7000);
+      });
+      await runSetup();
+    } catch (e) { console.warn('Automatic setup did not finish; it continues on the next launch', e); }
+  }, 4000);
 }
 
 window.addEventListener('unhandledrejection', (e) => console.warn('Unhandled rejection:', e.reason));

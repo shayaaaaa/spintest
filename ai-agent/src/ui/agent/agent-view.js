@@ -9,6 +9,7 @@ import { Composer } from '../session/composer.js';
 import { handleSubmit } from '../session/submit.js';
 import { MODES, nextMode } from '../../agent/permissions.js';
 import { modelLabel, contextWindow, chatModels, modelsStore } from '../../models/registry.js';
+import { setupStore } from '../../core/setup.js';
 import { openModelPicker, openProjectPicker, openSessions, ModelStatus } from '../pickers.js';
 import { openSettings } from '../settings/settings-view.js';
 import { exportMarkdown } from '../../agent/commands.js';
@@ -53,12 +54,15 @@ function StatusLine({ session }) {
 function Welcome({ session }) {
   const st = useStore(session.store, s => ({ cwd: s.cwd }));
   useStore(modelsStore, s => s.local.length);
+  const setup = useStore(setupStore);
   const models = chatModels();
+  const modelStep = setup.running && setup.steps.find(x => x.id === 'model' && x.state !== 'done');
   const ask = (t) => handleSubmit(session, t, [], makeUi('agent', session));
   return html`<div class="welcome">
     <div class="welcome-title"><span class="spark">✻</span> Welcome to Ai Agent</div>
     <div class="dim">cwd: ${st.cwd}</div>
-    ${!models.length && html`<div class="banner warn" style="margin-top:10px;font-family:var(--font)"><${Icon} name="alert" /><div class="grow">No model yet. <a href="#" onClick=${(e) => { e.preventDefault(); showTab('studio'); setTimeout(() => bus.emit('studio-tab', 'models'), 50); }}>Download one</a> (Qwen3 4B Instruct is a good start, 2.5 GB) or add a cloud API key in Settings.</div></div>`}
+    ${!models.length && modelStep && html`<div class="banner" style="margin-top:10px;font-family:var(--font)"><div class="spinner" style="width:16px;height:16px;border-width:2px;flex:none"></div><div class="grow">Setting up: downloading ${modelStep.label.replace(/ \(.*\)$/, '')} for the agent automatically (${Math.round((modelStep.progress || 0) * 100)}%). The agent can start as soon as it finishes; everything else installs alongside.</div></div>`}
+    ${!models.length && !modelStep && html`<div class="banner warn" style="margin-top:10px;font-family:var(--font)"><${Icon} name="alert" /><div class="grow">No model yet. <a href="#" onClick=${(e) => { e.preventDefault(); showTab('studio'); setTimeout(() => bus.emit('studio-tab', 'models'), 50); }}>Download one</a> (Qwen3 4B Instruct is a good start, 2.5 GB) or add a cloud API key in Settings.</div></div>`}
     <ul class="tips">
       <li><b>/help</b> commands · <b>/init</b> write AGENT.md · <b>/plan</b> plan first</li>
       <li><b>!</b> run a shell command · <b>#</b> remember something · <b>@</b> attach a file</li>

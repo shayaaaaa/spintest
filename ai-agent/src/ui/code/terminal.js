@@ -6,7 +6,7 @@ import * as vfs from '../../core/vfs.js';
 
 const shells = new Map();
 export function getShell(key, cwd) {
-  if (!shells.has(key)) shells.set(key, { sh: createShell({ cwd }), lines: [{ t: 'c', s: 'jsh — type help for commands, linux to open the Linux VM shell\n' }] });
+  if (!shells.has(key)) shells.set(key, { sh: createShell({ cwd }), lines: [{ t: 'c', s: 'jsh: type help for commands. Commands jsh doesn\'t have run in the Linux VM automatically (or type linux for a full Linux shell).\n' }] });
   return shells.get(key);
 }
 

@@ -1,8 +1,8 @@
 {
- "version": "977704de4ffe",
- "built": "2026-11-24T23:46:14.701Z",
+ "version": "714adc555692",
+ "built": "2026-11-24T23:57:40.766Z",
  "bytes": {
-  "core": 2598957,
+  "core": 2613485,
   "engines": 65545986
  },
  "core": [
@@ -36,6 +36,7 @@
   "src/core/net.js",
   "src/core/platform.js",
   "src/core/settings.js",
+  "src/core/setup.js",
   "src/core/store.js",
   "src/core/util.js",
   "src/core/vfs.js",
@@ -102,6 +103,7 @@
   "src/ui/session/submit.js",
   "src/ui/session/transcript.js",
   "src/ui/settings/settings-view.js",
+  "src/ui/setup-bar.js",
   "src/ui/studio/datasets-panel.js",
   "src/ui/studio/eval-panel.js",
   "src/ui/studio/models-panel.js",
