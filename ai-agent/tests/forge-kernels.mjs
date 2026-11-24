@@ -122,7 +122,7 @@ const results = await page.evaluate(async () => {
   {
     const R = 4, V = 1000;
     const L = rand(R * V, 4); const lab = Int32Array.from([3, -1, 999, 0]); const coef = Float32Array.from([0.5, 0.5, 0, 1]);
-    const refLp = new Float32Array(R), refG = new Float32Array(L);
+    const refLp = new Float32Array(R), refG = new Float32Array(R * V); // rows with coef 0 become zero gradients
     for (let r = 0; r < R; r++) {
       let m = -1e9; for (let j = 0; j < V; j++) m = Math.max(m, L[r * V + j]); let s = 0; for (let j = 0; j < V; j++) s += Math.exp(L[r * V + j] - m); const lse = m + Math.log(s);
       refLp[r] = lab[r] >= 0 ? L[r * V + lab[r]] - lse : 0;

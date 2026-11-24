@@ -76,7 +76,7 @@ if (want('sft')) {
 
   const sft = await page.evaluate(async (ref) => {
     const jobs = await import('./src/forge/jobs.js');
-    const { id } = await jobs.startRun({ method: 'lora', base: ref, dataset: 'forge-test-sft', name: 'secret', maxSteps: 24, batch: 4, lr: 2e-3, rank: 8, seqLen: 128, saveEvery: 12, evalEvery: 12 });
+    const { id } = await jobs.startRun({ method: 'lora', base: ref, dataset: 'forge-test-sft', name: 'secret', maxSteps: 16, batch: 2, lr: 3e-3, rank: 8, seqLen: 128, saveEvery: 8, evalEvery: 8 });
     const { run, live } = await waitRun(id);
     return { id, state: run.state, error: run.error, first: live.metrics[0]?.loss, last: live.metrics.at(-1)?.loss, samples: live.samples.map(s => s.text), steps: live.metrics.length };
   }, ref);

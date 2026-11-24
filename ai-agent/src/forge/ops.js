@@ -5,10 +5,31 @@ import * as K from './kernels.js';
 
 const wgs = (n, per = 256) => Math.ceil(n / per);
 
-export function matmul(g, { A, B, C, M, N, Kd, batch = 1, aOff = 0, sAm, sAk, sAz = 0, bOff = 0, sBk, sBn, sBz = 0, bDiv = 1, cOff = 0, sCm, sCn = 1, sCz = 0, acc = false, alpha = 1, bdtype = 'f32', bScales = null }) {
+export function matmul(g, args) {
+  const { M, N, Kd, batch = 1 } = args;
+  // Few output tiles but a long K (e.g. hidden-state gradient through the LM head): split K across workgroups.
+  const tiles = Math.ceil(M / 64) * Math.ceil(N / 64);
+  if (batch === 1 && tiles < 24 && Kd >= 4096 && !args.noSplit && !g.cpuLike) return matmulSplitK(g, args, tiles);
+  return matmulRaw(g, args);
+}
+
+function matmulSplitK(g, a, tiles) {
+  const { M, N, Kd, sAk, sBk } = a;
+  const S = Math.min(64, Math.max(2, Math.floor(96 / tiles)), Math.floor(Kd / 1024));
+  const Kc = Math.ceil(Kd / S / 32) * 32;
+  const full = Math.floor(Kd / Kc), rem = Kd - full * Kc;
+  const parts = full + (rem ? 1 : 0);
+  const P = g.temp(parts * M * N * 4);
+  matmulRaw(g, { ...a, Kd: Kc, batch: full, sAz: Kc * sAk, sBz: Kc * sBk, bDiv: 1, C: P, cOff: 0, sCm: N, sCn: 1, sCz: M * N, cDiv: 1, acc: false, alpha: 1 });
+  if (rem) matmulRaw(g, { ...a, Kd: rem, batch: 1, aOff: (a.aOff || 0) + full * Kc * sAk, bOff: (a.bOff || 0) + full * Kc * sBk, C: P, cOff: full * M * N, sCm: N, sCn: 1, sCz: 0, acc: false, alpha: 1 });
+  g.run('splitk', K.SPLITK_REDUCE, [P, a.C], params(M, N, parts, a.cOff || 0, a.sCm, a.sCn ?? 1, a.acc ? 1 : 0, F(a.alpha ?? 1)), [wgs(M * N)]);
+  g.release(P);
+}
+
+function matmulRaw(g, { A, B, C, M, N, Kd, batch = 1, aOff = 0, sAm, sAk, sAz = 0, bOff = 0, sBk, sBn, sBz = 0, bDiv = 1, cOff = 0, sCm, sCn = 1, sCz = 0, cDiv = 1, acc = false, alpha = 1, bdtype = 'f32', bScales = null }) {
   const code = K.matmulCode(bdtype);
   const bufs = bdtype === 'nf4' ? [A, B, bScales, C] : [A, B, C];
-  g.run('mm_' + bdtype, code, bufs, params(M, N, Kd, batch, aOff, sAm, sAk, sAz, bOff, sBk, sBn, sBz, cOff, sCm, sCn, sCz, bDiv, acc ? 1 : 0, F(alpha), 1), [Math.ceil(N / 64), Math.ceil(M / 64), batch]);
+  g.run('mm_' + bdtype, code, bufs, params(M, N, Kd, batch, aOff, sAm, sAk, sAz, bOff, sBk, sBn, sBz, cOff, sCm, sCn, sCz, bDiv, acc ? 1 : 0, F(alpha), cDiv), [Math.ceil(N / 64), Math.ceil(M / 64), batch]);
 }
 
 // y[T][out] (+)= x[T][in] · Wᵀ
@@ -16,7 +37,7 @@ export function linear(g, x, W, y, T, { xOff = 0, yOff = 0, ldy = W.out, acc = f
   if (T <= 4) {
     const code = K.gemvCode(W.dtype);
     const bufs = W.dtype === 'nf4' ? [x, W.buf, W.scales, y] : [x, W.buf, y];
-    g.run('gemv_' + W.dtype, code, bufs, params(T, W.out, W.in, acc ? 1 : 0, xOff, yOff, ldy, F(alpha)), [W.out, 1, T]);
+    g.run('gemv_' + W.dtype, code, bufs, params(T, W.out, W.in, acc ? 1 : 0, xOff, yOff, ldy, F(alpha)), [Math.ceil(W.out / 16), 1, T]);
     return;
   }
   matmul(g, { A: x, B: W.buf, bScales: W.scales, bdtype: W.dtype, C: y, M: T, N: W.out, Kd: W.in, aOff: xOff, sAm: W.in, sAk: 1, sBk: 1, sBn: W.in, cOff: yOff, sCm: ldy, acc, alpha });

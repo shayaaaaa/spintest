@@ -21,12 +21,18 @@ export function Terminal({ id = 'main', cwd = '/workspace', onCwd }) {
   useEffect(() => { if (cwd && !busy && sh.cwd !== cwd && !state.userCd) { sh.cwd = cwd; force(n => n + 1); } }, [cwd]);
   useEffect(() => { const el = out.current; if (el) el.scrollTop = el.scrollHeight; }, [lines]);
   const push = (l) => { state.lines = [...state.lines, l].slice(-2000); setLines(state.lines); };
-  const prompt = () => (sh.cwd === '/' ? '~' : '~' + sh.cwd) + ' $ ';
+  const prompt = () => state.linux ? 'alpine # ' : (sh.cwd === '/' ? '~' : '~' + sh.cwd) + ' $ ';
   const run = async (cmd) => {
     push({ t: 'p', s: prompt(), cmd });
     if (!cmd.trim()) return;
     if (cmd.trim() === 'clear') { state.lines = []; setLines([]); return; }
     sh.history.push(cmd); hist.current = -1;
+    if (state.linux && cmd.trim() === 'exit') { state.linux = false; push({ t: 'c', s: 'Back to jsh. The VM keeps running in the background (linux --stop to stop it).\n' }); force(n => n + 1); return; }
+    if (!state.linux && cmd.trim() === 'linux') {
+      state.linux = true; force(n => n + 1);
+      push({ t: 'c', s: 'Alpine Linux VM (type exit to return to jsh; linux --put/--get copy files from/to the Hub).\n' });
+      cmd = 'uname -sr; cat /etc/alpine-release';
+    }
     setBusy(true);
     ctrl.current = new AbortController();
     let buf = '';
@@ -34,7 +40,9 @@ export function Terminal({ id = 'main', cwd = '/workspace', onCwd }) {
     const timer = setInterval(flush, 120);
     const before = sh.cwd;
     try {
-      const r = await sh.run(cmd, { onOutput: (s) => { buf += s; }, signal: ctrl.current.signal });
+      const r = state.linux
+        ? await (async () => { const { linuxRun } = await import('../../runtimes/linux.js'); const code = await linuxRun(/^\s*linux\s+(--\w+)/.test(cmd) ? cmd.replace(/^\s*linux\s+/, '') : cmd, { io: { out: (s) => { buf += s; }, err: (s) => { buf += s; } }, cwd: sh.cwd, signal: ctrl.current.signal }); return { code, stdout: buf || ' ' }; })()
+        : await sh.run(cmd, { onOutput: (s) => { buf += s; }, signal: ctrl.current.signal });
       clearInterval(timer); flush();
       if (r.code && !r.stdout && !r.stderr) push({ t: 'e', s: `exit ${r.code}\n` });
     } catch (e) { clearInterval(timer); flush(); push({ t: 'e', s: String(e.message || e) + '\n' }); }

@@ -102,7 +102,9 @@ export class LlamaModel {
     // Embedding (sharded by rows to respect the max storage binding size).
     const E = rowsOf('model.embed_tokens.weight');
     if (!E) throw new Error('Missing tensor model.embed_tokens.weight');
-    cfg.V = where.get('model.embed_tokens.weight').info.shape[0];
+    const es = where.get('model.embed_tokens.weight').info.shape;
+    if (es.length === 2 && es[1] === cfg.D) cfg.V = es[0];
+    else if (es.length !== 2) throw new Error('model.embed_tokens.weight must be 2-D [vocab, hidden]');
     this.embed = await this._embedShards(E, cfg.V, cfg.D, this.mode === 'full', 'model.embed_tokens.weight');
     const Wh = cfg.tied ? null : rowsOf('lm_head.weight');
     if (!Wh) cfg.tied = true;

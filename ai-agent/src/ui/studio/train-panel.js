@@ -11,7 +11,7 @@ import { runsStore, loadRuns, startRun, stopRun, resumeRun, estimate, benchmark,
 import { settings } from '../../core/settings.js';
 import { bus } from '../../core/bus.js';
 import { fmtDuration, fmtNum, relTime, debounce } from '../../core/util.js';
-import { openFileInEditor } from '../layout.js';
+import { openFileInEditor, openInHub } from '../layout.js';
 
 const TARGETS = ['q', 'k', 'v', 'o', 'gate', 'up', 'down'];
 const DATA_FOR = { sft: ['sft'], pretrain: ['text', 'sft'], scratch: ['text', 'sft'], dpo: ['dpo'], grpo: ['grpo'] };
@@ -182,8 +182,8 @@ function RunDetail({ id, back }) {
         <div class="small dim">${METHODS[run.method]?.label}${run.method !== 'scratch' ? ' · ' + run.tuning.toUpperCase() : ''} · ${run.baseName} · ${run.dataset}</div></div>
       <span class=${'tag ' + (STATE_TAG[run.state] || '')}>${run.state}</span>
       <button class="ibtn" aria-label="More" onClick=${(e) => openMenu(e.currentTarget, [
-        { text: 'Open folder in Hub', icon: 'folder', onClick: () => bus.emit('open-hub-path', run.dir) },
-        { text: 'Run config', icon: 'file', onClick: () => openFileInEditor?.(run.dir + '/run.json') },
+        { text: 'Open folder in Hub', icon: 'folder', onClick: () => openInHub(run.dir) },
+        { text: 'Run config', icon: 'file', onClick: () => openFileInEditor(run.dir + '/run.json') },
         { sep: true },
         { text: 'Delete run', icon: 'trash', danger: true, disabled: running, onClick: async () => { if (await confirmDialog({ title: 'Delete this run?', message: 'Checkpoints, metrics and samples are removed. Exported models stay.', ok: 'Delete', danger: true })) { await deleteRun(id); back(); } } },
       ])}><${Icon} name="more" /></button></div>

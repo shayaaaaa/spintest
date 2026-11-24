@@ -50,7 +50,8 @@ const results = await page.evaluate(async () => {
 
   for (const type of ['llama', 'qwen2', 'qwen3']) {
     const { config, W } = tinyCheckpoint(type);
-    const file = new File([encodeSafetensors(Object.entries(W).map(([name, data]) => ({ name, dtype: 'F32', shape: [data.length], data })))], 'model.safetensors');
+    const shapeOf = (name, n) => /norm|bias/.test(name) ? [n] : [n / (/down_proj|o_proj/.test(name) ? (/down_proj/.test(name) ? config.intermediate_size : config.hidden_size) : config.hidden_size), /down_proj/.test(name) ? config.intermediate_size : config.hidden_size];
+    const file = new File([encodeSafetensors(Object.entries(W).map(([name, data]) => ({ name, dtype: 'F32', shape: shapeOf(name, data.length), data })))], 'model.safetensors');
     const cfg = normalizeConfig(config);
     const T = 13;
     const ids = Array.from({ length: T }, () => Math.floor(rnd() * cfg.V));

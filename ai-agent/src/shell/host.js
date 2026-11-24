@@ -44,7 +44,7 @@ export function createShell({ cwd = '/workspace', session } = {}) {
       const { linuxRun } = await import('../runtimes/linux.js');
       return linuxRun(argv.join(' '), { io, cwd: shell.cwd, signal: ctx.signal });
     },
-    linuxEnabled: () => false,
+    linuxEnabled: () => !!globalThis.__aiaLinuxReady,
     async git(args, io, shell, ctx) {
       const { gitCommand } = await import('../runtimes/git.js');
       return gitCommand(args, io, shell, ctx);

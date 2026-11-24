@@ -134,9 +134,21 @@ await bundle('transformers', `export * from '@huggingface/transformers';`, {
 });
 for (const f of ['ort-wasm-simd-threaded.jsep.mjs', 'ort-wasm-simd-threaded.jsep.wasm']) copy('@huggingface/transformers/dist/' + f, 'ort/' + f);
 
+// git (isomorphic-git + its fetch-based HTTP client) for the shell's git command
+fs.writeFileSync(path.join(tmp, 'buffer-shim.js'), `import { Buffer } from ${JSON.stringify(path.join(nm, 'buffer/index.js'))}; export { Buffer };`);
+await bundle('git', `export * as git from 'isomorphic-git'; export { default as http } from 'isomorphic-git/http/web';`, { mainFields: ['browser', 'module', 'main'], conditions: ['browser', 'import'], inject: [path.join(tmp, 'buffer-shim.js')] });
+
 // v86 (x86 emulator for the Linux VM)
 copy('v86/build/libv86.mjs', 'v86/libv86.mjs');
 copy('v86/build/v86.wasm', 'v86/v86.wasm');
+// BIOS images are not in the npm package; fetch them from the v86 repository once.
+for (const f of ['seabios.bin', 'vgabios.bin']) {
+  const dst = path.join(out, 'v86', f);
+  if (fs.existsSync(dst)) continue;
+  const r = await fetch(`https://github.com/copy/v86/raw/master/bios/${f}`);
+  if (!r.ok) throw new Error(`BIOS download failed: ${f} ${r.status}`);
+  fs.writeFileSync(dst, Buffer.from(await r.arrayBuffer()));
+}
 
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log('vendor done');

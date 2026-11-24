@@ -104,6 +104,12 @@ export class WllamaEngine {
     return { content, stopReason: hasCalls ? 'tool_use' : finish === 'length' ? 'max_tokens' : 'end_turn', usage };
   }
 
+  // Raw text completion (no chat template): fill-in-the-middle ghost text in the Code tab.
+  async complete({ prompt, maxTokens = 64, temperature = 0.2, stop, signal }) {
+    const r = await this.w.createCompletion({ prompt, max_tokens: maxTokens, temperature, top_p: 0.9, stream: false, cache_prompt: true, abortSignal: signal, ...(stop ? { stop } : {}) });
+    return r?.choices?.[0]?.text ?? '';
+  }
+
   async embed(texts) {
     const r = await this.w.createEmbedding({ input: texts });
     return r.data.map(d => d.embedding);

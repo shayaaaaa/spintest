@@ -25,3 +25,7 @@
 .step-list { counter-reset: s; list-style: none; padding: 0; margin: 0; }
 .step-list li { counter-increment: s; position: relative; padding: 0 0 12px 34px; }
 .step-list li::before { content: counter(s); position: absolute; left: 0; top: -1px; width: 24px; height: 24px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.arena-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.arena-col { border: 1px solid var(--border); border-radius: 12px; padding: 8px 10px; min-width: 0; font-size: 13.5px; overflow-wrap: anywhere; }
+.arena-col.won { border-color: color-mix(in srgb, var(--ok) 60%, transparent); background: color-mix(in srgb, var(--ok) 7%, transparent); }
+@media (max-width: 520px) { .arena-grid { grid-template-columns: 1fr; } }

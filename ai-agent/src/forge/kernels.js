@@ -18,6 +18,22 @@ fn load_${name}(i: u32) -> f32 { let w = ${name}[i >> 3u]; let q = (w >> ((i & 7
   throw new Error('dtype ' + dtype);
 }
 
+
+// Workgroup reductions with two barriers (partials -> one thread sums -> broadcast). Much cheaper than log-step
+// trees on tile-based mobile GPUs and on CPU-emulated adapters. Call from uniform control flow only.
+const reduceFns = (WG) => `
+var<workgroup> red: array<f32, ${WG}>;
+fn wsum(v: f32, lid: u32) -> f32 {
+  red[lid] = v; workgroupBarrier();
+  if (lid == 0u) { var s = 0.0; for (var i = 0u; i < ${WG}u; i = i + 1u) { s += red[i]; } red[0] = s; }
+  workgroupBarrier(); let r = red[0]; workgroupBarrier(); return r;
+}
+fn wmax(v: f32, lid: u32) -> f32 {
+  red[lid] = v; workgroupBarrier();
+  if (lid == 0u) { var s = red[0]; for (var i = 1u; i < ${WG}u; i = i + 1u) { s = max(s, red[i]); } red[0] = s; }
+  workgroupBarrier(); let r = red[0]; workgroupBarrier(); return r;
+}`;
+
 // ---------- batched strided matmul ----------
 // C[z][m][n] (+)= alpha * sum_k A[z][m][k] * B[z/bDiv][k][n], with arbitrary strides (covers NN, NT, TN).
 export function matmulCode(bdtype) {
@@ -51,11 +67,10 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid:
       var va = 0.0;
       if (gm < p.M && gk < p.K) { va = A[aBase + gm * p.sAm + gk * p.sAk]; }
       As[kk * 64u + mm] = va;
-      let nn = e / 16u;
-      let gn = n0 + nn;
+      let gn = n0 + mm;
       var vb = 0.0;
       if (gn < p.N && gk < p.K) { vb = load_B(bBase + gk * p.sBk + gn * p.sBn); }
-      Bt[kk * 64u + nn] = vb;
+      Bt[kk * 64u + mm] = vb;
     }
     workgroupBarrier();
     for (var kk = 0u; kk < 16u; kk = kk + 1u) {
@@ -95,21 +110,25 @@ ${loader('W', bdtype, 1, 2)}
 @group(0) @binding(${sb ? 3 : 2}) var<storage, read_write> Y: array<f32>;
 @group(0) @binding(${sb ? 4 : 3}) var<uniform> p: P;
 var<workgroup> red: array<f32, 64>;
+// 16 output rows per workgroup, 4 lanes per row, one barrier.
 @compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
-  let n = wg.x + wg.y * nw.x;
-  if (n >= p.N) { return; }
+  let lane = lid.x & 3u;
+  let n = (wg.x + wg.y * nw.x) * 16u + (lid.x >> 2u);
   let m = wg.z;
-  var s = 0.0;
-  let wb = n * p.K;
-  let xb = p.xOff + m * p.K;
-  for (var k = lid.x; k < p.K; k = k + 64u) { s += X[xb + k] * load_W(wb + k); }
-  red[lid.x] = s;
+  var s0 = 0.0; var s1 = 0.0;
+  if (n < p.N) {
+    let wb = n * p.K;
+    let xb = p.xOff + m * p.K;
+    var k = lane;
+    for (; k + 4u < p.K; k = k + 8u) { s0 += X[xb + k] * load_W(wb + k); s1 += X[xb + k + 4u] * load_W(wb + k + 4u); }
+    if (k < p.K) { s0 += X[xb + k] * load_W(wb + k); }
+  }
+  red[lid.x] = s0 + s1;
   workgroupBarrier();
-  for (var w = 32u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  if (lid.x == 0u) {
+  if (lane == 0u && n < p.N) {
     let idx = p.yOff + m * p.ldy + n;
-    let v = p.alpha * red[0];
+    let v = p.alpha * (red[lid.x] + red[lid.x + 1u] + red[lid.x + 2u] + red[lid.x + 3u]);
     if (p.acc == 1u) { Y[idx] = Y[idx] + v; } else { Y[idx] = v; }
   }
 }`;
@@ -187,21 +206,18 @@ ${loader('W', wdtype, 1, 9)}
 @group(0) @binding(2) var<storage, read_write> Y: array<f32>;
 @group(0) @binding(3) var<storage, read_write> R: array<f32>;
 @group(0) @binding(4) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
-@compute @workgroup_size(256)
+${reduceFns(64)}
+@compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let r = wg.x + wg.y * nw.x;
   if (r >= p.rows) { return; }
   let xb = p.xOff + r * p.D;
   var s = 0.0;
-  for (var i = lid.x; i < p.D; i = i + 256u) { let v = X[xb + i]; s += v * v; }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  let rstd = inverseSqrt(red[0] / f32(p.D) + p.eps);
+  for (var i = lid.x; i < p.D; i = i + 64u) { let v = X[xb + i]; s += v * v; }
+  let rstd = inverseSqrt(wsum(s, lid.x) / f32(p.D) + p.eps);
   if (lid.x == 0u) { R[r] = rstd; }
   let yb = p.yOff + r * p.D;
-  for (var i = lid.x; i < p.D; i = i + 256u) {
+  for (var i = lid.x; i < p.D; i = i + 64u) {
     var w = 1.0;
     if (p.hasW == 1u) { w = load_W(i); if (p.plusOne == 1u) { w = w + 1.0; } }
     Y[yb + i] = X[xb + i] * rstd * w;
@@ -217,8 +233,8 @@ ${loader('W', wdtype, 1, 9)}
 @group(0) @binding(3) var<storage, read> R: array<f32>;
 @group(0) @binding(4) var<storage, read_write> DX: array<f32>;
 @group(0) @binding(5) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
-@compute @workgroup_size(256)
+${reduceFns(64)}
+@compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let r = wg.x + wg.y * nw.x;
   if (r >= p.rows) { return; }
@@ -226,16 +242,13 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<
   let db = r * p.D;
   let rstd = R[r];
   var s = 0.0;
-  for (var i = lid.x; i < p.D; i = i + 256u) {
+  for (var i = lid.x; i < p.D; i = i + 64u) {
     var w = 1.0; if (p.hasW == 1u) { w = load_W(i); if (p.plusOne == 1u) { w = w + 1.0; } }
     s += X[xb + i] * w * DY[db + i];
   }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  let c = red[0] / f32(p.D) * rstd * rstd * rstd;
+  let c = wsum(s, lid.x) / f32(p.D) * rstd * rstd * rstd;
   let ob = p.dxOff + r * p.D;
-  for (var i = lid.x; i < p.D; i = i + 256u) {
+  for (var i = lid.x; i < p.D; i = i + 64u) {
     var w = 1.0; if (p.hasW == 1u) { w = load_W(i); if (p.plusOne == 1u) { w = w + 1.0; } }
     let v = rstd * w * DY[db + i] - X[xb + i] * c;
     if (p.acc == 1u) { DX[ob + i] = DX[ob + i] + v; } else { DX[ob + i] = v; }
@@ -286,8 +299,8 @@ export const SOFTMAX_FWD = `
 struct P { rows: u32, Tq: u32, Tk: u32, pos0: u32, scale: f32, causal: u32, pad0: u32, pad1: u32 };
 @group(0) @binding(0) var<storage, read_write> S: array<f32>;
 @group(0) @binding(1) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
-@compute @workgroup_size(256)
+${reduceFns(64)}
+@compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let r = wg.x + wg.y * nw.x;
   if (r >= p.rows) { return; }
@@ -296,19 +309,12 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<
   if (p.causal == 1u) { lim = min(p.Tk, p.pos0 + q + 1u); }
   let b = r * p.Tk;
   var m = -3.4e38;
-  for (var j = lid.x; j < lim; j = j + 256u) { m = max(m, S[b + j] * p.scale); }
-  red[lid.x] = m;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] = max(red[lid.x], red[lid.x + w]); } workgroupBarrier(); }
-  let mx = red[0];
-  workgroupBarrier();
+  for (var j = lid.x; j < lim; j = j + 64u) { m = max(m, S[b + j] * p.scale); }
+  let mx = wmax(m, lid.x);
   var s = 0.0;
-  for (var j = lid.x; j < lim; j = j + 256u) { s += exp(S[b + j] * p.scale - mx); }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  let inv = 1.0 / red[0];
-  for (var j = lid.x; j < p.Tk; j = j + 256u) {
+  for (var j = lid.x; j < lim; j = j + 64u) { s += exp(S[b + j] * p.scale - mx); }
+  let inv = 1.0 / wsum(s, lid.x);
+  for (var j = lid.x; j < p.Tk; j = j + 64u) {
     if (j < lim) { S[b + j] = exp(S[b + j] * p.scale - mx) * inv; } else { S[b + j] = 0.0; }
   }
 }`;
@@ -319,19 +325,16 @@ struct P { rows: u32, Tk: u32, scale: f32, pad: u32 };
 @group(0) @binding(0) var<storage, read> Pm: array<f32>;
 @group(0) @binding(1) var<storage, read_write> dP: array<f32>;
 @group(0) @binding(2) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
-@compute @workgroup_size(256)
+${reduceFns(64)}
+@compute @workgroup_size(64)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let r = wg.x + wg.y * nw.x;
   if (r >= p.rows) { return; }
   let b = r * p.Tk;
   var s = 0.0;
-  for (var j = lid.x; j < p.Tk; j = j + 256u) { s += dP[b + j] * Pm[b + j]; }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  let dot = red[0];
-  for (var j = lid.x; j < p.Tk; j = j + 256u) { dP[b + j] = Pm[b + j] * (dP[b + j] - dot) * p.scale; }
+  for (var j = lid.x; j < p.Tk; j = j + 64u) { s += dP[b + j] * Pm[b + j]; }
+  let dot = wsum(s, lid.x);
+  for (var j = lid.x; j < p.Tk; j = j + 64u) { dP[b + j] = Pm[b + j] * (dP[b + j] - dot) * p.scale; }
 }`;
 
 // ---------- embedding gather: out[t] = E[ids[t] - rowStart] for ids in [rowStart, rowStart+rows) ----------
@@ -385,7 +388,7 @@ struct P { R: u32, V: u32, pad0: u32, pad1: u32 };
 @group(0) @binding(2) var<storage, read> COEF: array<f32>;
 @group(0) @binding(3) var<storage, read_write> LP: array<f32>;
 @group(0) @binding(4) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
+${reduceFns(256)}
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let r = wg.x + wg.y * nw.x;
@@ -393,17 +396,10 @@ fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(num_workgroups) nw: vec3<
   let b = r * p.V;
   var m = -3.4e38;
   for (var j = lid.x; j < p.V; j = j + 256u) { m = max(m, L[b + j]); }
-  red[lid.x] = m;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] = max(red[lid.x], red[lid.x + w]); } workgroupBarrier(); }
-  let mx = red[0];
-  workgroupBarrier();
+  let mx = wmax(m, lid.x);
   var s = 0.0;
   for (var j = lid.x; j < p.V; j = j + 256u) { s += exp(L[b + j] - mx); }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  let lse = mx + log(red[0]);
+  let lse = mx + log(wsum(s, lid.x));
   let lab = LAB[r];
   if (lid.x == 0u) { if (lab >= 0) { LP[r] = L[b + u32(lab)] - lse; } else { LP[r] = 0.0; } }
   workgroupBarrier();
@@ -444,7 +440,7 @@ struct P { n: u32, off: u32, pad1: u32, pad2: u32 };
 @group(0) @binding(0) var<storage, read> X: array<f32>;
 @group(0) @binding(1) var<storage, read_write> O: array<f32>;
 @group(0) @binding(2) var<uniform> p: P;
-var<workgroup> red: array<f32, 256>;
+${reduceFns(256)}
 @compute @workgroup_size(256)
 fn main(@builtin(workgroup_id) wgid: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
   let wx = wgid.x + wgid.y * nw.x;
@@ -452,10 +448,8 @@ fn main(@builtin(workgroup_id) wgid: vec3<u32>, @builtin(num_workgroups) nw: vec
   var s = 0.0;
   let start = wx * 4096u;
   for (var i = start + lid.x; i < min(p.n, start + 4096u); i = i + 256u) { let v = X[i]; s += v * v; }
-  red[lid.x] = s;
-  workgroupBarrier();
-  for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  if (lid.x == 0u) { O[p.off + wx] = red[0]; }
+  let tot = wsum(s, lid.x);
+  if (lid.x == 0u) { O[p.off + wx] = tot; }
 }`;
 
 // Row-broadcast bias add: X[t][c] += b[c]
@@ -499,4 +493,21 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
   if (idx >= p.rows * p.cols) { return; }
   let r = idx / p.cols; let c = idx % p.cols;
   D[p.dstOff + r * p.dstLd + c] = S[p.srcOff + r * p.srcLd + c];
+}`;
+
+// Split-K reduction: C[m][n] (+)= alpha * sum_z Pz[z][m][n]
+export const SPLITK_REDUCE = `
+struct P { M: u32, N: u32, S: u32, cOff: u32, sCm: u32, sCn: u32, acc: u32, alpha: f32 };
+@group(0) @binding(0) var<storage, read> PZ: array<f32>;
+@group(0) @binding(1) var<storage, read_write> C: array<f32>;
+@group(0) @binding(2) var<uniform> p: P;
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>) {
+  let i = gid.x + gid.y * nw.x * 256u;
+  if (i >= p.M * p.N) { return; }
+  var s = 0.0;
+  for (var z = 0u; z < p.S; z = z + 1u) { s += PZ[z * p.M * p.N + i]; }
+  let m = i / p.N; let n = i % p.N;
+  let idx = p.cOff + m * p.sCm + n * p.sCn;
+  if (p.acc == 1u) { C[idx] = C[idx] + p.alpha * s; } else { C[idx] = p.alpha * s; }
 }`;

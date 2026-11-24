@@ -21,6 +21,9 @@ export class GPU {
     this.limits = device.limits;
     this.maxBinding = device.limits.maxStorageBufferBindingSize;
     this.maxWG = device.limits.maxComputeWorkgroupsPerDimension || 65535;
+    // CPU-emulated adapters (SwiftShader, lavapipe) gain nothing from extra parallelism such as split-K.
+    const info = adapter?.info || {};
+    this.cpuLike = /swiftshader|lavapipe|llvmpipe|cpu/i.test(`${info.architecture} ${info.description} ${info.device}`) || info.type === 'cpu';
     this.pipelines = new Map();
     this.enc = null;
     this.pass = null;
