@@ -88,10 +88,13 @@ const results = await page.evaluate(async () => {
     await ml.loadWeights([file]);
     const l0 = await meanLoss(ml, ids, labels);
     push(`${type} lora/f16: forward loss before training`, rel(l0, refL), 5e-3);
+    // Param IO round trip (names follow HF/PEFT).
+    const st = await m.readParams();
+    out.push({ name: `${type} full: readParams uses HF names`, ok: st.has('model.embed_tokens.weight') && st.has('model.layers.1.mlp.down_proj.weight') && st.get('model.embed_tokens.weight').data.length === cfg.V * cfg.D, err: 0 });
     // Give B non-zero values so A gets gradients too.
-    for (const p of ml.params) if (p.name.endsWith('lora_B')) g.upload(p.buf, Float32Array.from({ length: p.n }, () => gauss() * 0.05));
+    for (const p of ml.params) if (p.name.includes('lora_B')) g.upload(p.buf, Float32Array.from({ length: p.n }, () => gauss() * 0.05));
     await grads(ml, ids, labels);
-    const pick = ml.params.filter((p, i) => i % 3 === 0 || p.name.startsWith('0.q') || p.name.startsWith('1.down'));
+    const pick = ml.params.filter((p, i) => i % 3 === 0 || /layers\.0\.self_attn\.q|layers\.1\.mlp\.down/.test(p.name));
     for (const p of pick) {
       let r = await fdCheck(ml, p, ids, labels);
       if (r.err > 5e-2) { const r2 = await fdCheck(ml, p, ids, labels, 5e-4); if (r2.err < r.err) r = r2; }

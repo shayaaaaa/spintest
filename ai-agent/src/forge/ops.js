@@ -90,8 +90,21 @@ export function adamw(g, w, grad, m, v, n, { step, lr, b1 = 0.9, b2 = 0.999, eps
 export async function sumsq(g, x, n) {
   const parts = Math.ceil(n / 4096);
   const out = g.temp(parts * 4);
-  g.run('sumsq', K.SUMSQ, [x, out], params(n), [parts]);
+  g.run('sumsq', K.SUMSQ, [x, out], params(n, 0), [parts]);
   const arr = await g.readF32(out, parts);
+  g.release(out);
+  let s = 0; for (const v of arr) s += v;
+  return s;
+}
+
+// Sum of squares over many buffers with a single readback. list: [[buf, n], ...]
+export async function sumsqMany(g, list) {
+  const total = list.reduce((a, [, n]) => a + Math.ceil(n / 4096), 0);
+  if (!total) return 0;
+  const out = g.temp(total * 4);
+  let off = 0;
+  for (const [x, n] of list) { const parts = Math.ceil(n / 4096); g.run('sumsq', K.SUMSQ, [x, out], params(n, off), [parts]); off += parts; }
+  const arr = await g.readF32(out, total);
   g.release(out);
   let s = 0; for (const v of arr) s += v;
   return s;

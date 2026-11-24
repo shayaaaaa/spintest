@@ -440,20 +440,22 @@ fn main(@builtin(global_invocation_id) gid: vec3<u32>, @builtin(num_workgroups) 
 
 // Sum of squares, partial per workgroup (for gradient norm and losses).
 export const SUMSQ = `
-struct P { n: u32, pad0: u32, pad1: u32, pad2: u32 };
+struct P { n: u32, off: u32, pad1: u32, pad2: u32 };
 @group(0) @binding(0) var<storage, read> X: array<f32>;
 @group(0) @binding(1) var<storage, read_write> O: array<f32>;
 @group(0) @binding(2) var<uniform> p: P;
 var<workgroup> red: array<f32, 256>;
 @compute @workgroup_size(256)
-fn main(@builtin(workgroup_id) wg: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+fn main(@builtin(workgroup_id) wgid: vec3<u32>, @builtin(num_workgroups) nw: vec3<u32>, @builtin(local_invocation_id) lid: vec3<u32>) {
+  let wx = wgid.x + wgid.y * nw.x;
+  if (wx * 4096u >= p.n) { return; }
   var s = 0.0;
-  let start = wg.x * 4096u;
+  let start = wx * 4096u;
   for (var i = start + lid.x; i < min(p.n, start + 4096u); i = i + 256u) { let v = X[i]; s += v * v; }
   red[lid.x] = s;
   workgroupBarrier();
   for (var w = 128u; w > 0u; w = w >> 1u) { if (lid.x < w) { red[lid.x] += red[lid.x + w]; } workgroupBarrier(); }
-  if (lid.x == 0u) { O[wg.x] = red[0]; }
+  if (lid.x == 0u) { O[p.off + wx] = red[0]; }
 }`;
 
 // Row-broadcast bias add: X[t][c] += b[c]

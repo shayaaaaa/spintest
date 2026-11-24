@@ -57,6 +57,39 @@ export async function readTensor(file, info, dataStart) {
   throw new Error(`Unsupported dtype ${info.dtype}`);
 }
 
+// Reads rows [r0, r0+rows) of a 2-D tensor as Float32Array (keeps memory low for huge embeddings).
+export async function readTensorRows(file, info, dataStart, r0, rows) {
+  const cols = info.shape.slice(1).reduce((a, b) => a * b, 1);
+  const bpe = info.dtype === 'F32' ? 4 : 2;
+  const s = dataStart + info.data_offsets[0] + r0 * cols * bpe;
+  return readTensor(file, { ...info, data_offsets: [s - dataStart, s - dataStart + rows * cols * bpe] }, dataStart);
+}
+
+// Streams a safetensors file to `stream` ({write(Uint8Array)}): specs [{name, dtype, shape}], get(name) -> TypedArray
+// already in the target dtype's bit layout (Float32Array for F32, Uint16Array for BF16/F16).
+export async function writeSafetensors(stream, specs, get, metadata = {}) {
+  const header = { __metadata__: Object.fromEntries(Object.entries(metadata).map(([k, v]) => [k, String(v)])) };
+  let off = 0;
+  for (const t of specs) {
+    const bytes = t.shape.reduce((a, b) => a * b, 1) * (t.dtype === 'F32' ? 4 : 2);
+    header[t.name] = { dtype: t.dtype, shape: t.shape, data_offsets: [off, off + bytes] };
+    off += bytes;
+  }
+  let hjson = JSON.stringify(header);
+  while ((8 + hjson.length) % 8) hjson += ' ';
+  const hb = new TextEncoder().encode(hjson);
+  const len = new Uint8Array(8); new DataView(len.buffer).setBigUint64(0, BigInt(hb.length), true);
+  await stream.write(len); await stream.write(hb);
+  for (const t of specs) {
+    const data = await get(t.name, t);
+    const want = header[t.name].data_offsets[1] - header[t.name].data_offsets[0];
+    if (data.byteLength !== want) throw new Error(`${t.name}: expected ${want} bytes, got ${data.byteLength}`);
+    await stream.write(new Uint8Array(data.buffer, data.byteOffset, data.byteLength));
+  }
+  return off + 8 + hb.length;
+}
+export const toDtype = (arr, dtype) => dtype === 'F32' ? arr : dtype === 'BF16' ? f32ToBf16(arr) : f32ToF16(arr);
+
 // NF4 quantization (blocks of 64 along the flat index). Returns {q: Uint32Array (8 codes per u32), scales: Float32Array}.
 const nf4Mid = NF4.slice(0, -1).map((v, i) => (v + NF4[i + 1]) / 2);
 export function quantNF4(arr) {

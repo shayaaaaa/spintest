@@ -1,9 +1,9 @@
 // Llama-family transformer (Llama 2/3, SmolLM2, Mistral, Qwen2/2.5, Qwen3) for training and inference on WebGPU.
 // Training uses activation checkpointing: only each layer's input is kept; the layer is recomputed during backward.
 import * as ops from './ops.js';
-import { readHeader, readTensor, packF16, quantNF4 } from './safetensors.js';
+import { readHeader, readTensor, readTensorRows, packF16, quantNF4 } from './safetensors.js';
 
-const SUPPORTED = ['llama', 'mistral', 'qwen2', 'qwen3', 'smollm', 'granite'];
+const SUPPORTED = ['llama', 'mistral', 'qwen2', 'qwen3', 'smollm'];
 
 export function normalizeConfig(c) {
   const type = c.model_type || 'llama';
@@ -45,38 +45,44 @@ export class LlamaModel {
   constructor(g, cfg, { mode = 'lora', lora = { r: 16, alpha: 32, targets: TARGETS }, quant = 'f16' } = {}) {
     this.g = g; this.cfg = cfg; this.mode = mode; this.quant = quant;
     this.lora = mode === 'lora' ? { r: lora.r || 16, alpha: lora.alpha || 2 * (lora.r || 16), targets: lora.targets || TARGETS } : null;
-    this.loraOn = true;
+    this._loraOn = true;
     this.layers = [];
     this.params = []; // trainable: {name, buf, n, grad, m, v, shape, wd}
-    this.inv = g.fromArray(invFreq(cfg), 'rope_inv');
+    this.owned = [];
+    this.inv = this._a(invFreq(cfg));
   }
+  get loraOn() { return this._loraOn; }
+  set loraOn(v) { if (v !== this._loraOn && this.cache) this.cache.ids = []; this._loraOn = v; }
+  _a(arr) { const b = this.g.fromArray(arr); this.owned.push(b); return b; }
+  _b(bytes) { const b = this.g.buffer(bytes); this.owned.push(b); return b; }
 
   // ---------- weights ----------
-  _frozen(arr, shape, kind) {
+  _frozen(arr, shape, kind, name) {
     const g = this.g;
-    if (this.mode === 'full') return this._trainable(arr, shape, kind);
+    if (this.mode === 'full') return this._trainable(arr, shape, kind, name);
     if (kind === 'linear' && this.quant === 'nf4' && arr.length % 64 === 0) {
       const { q, scales } = quantNF4(arr);
-      return { buf: g.fromArray(q), scales: g.fromArray(scales), dtype: 'nf4', out: shape[0], in: shape[1] };
+      return { buf: this._a(q), scales: this._a(scales), dtype: 'nf4', out: shape[0], in: shape[1] };
     }
-    if (kind === 'norm' || kind === 'bias') return { buf: g.fromArray(arr), dtype: 'f32', out: shape[0], in: shape[1] || 1 };
-    return { buf: g.fromArray(packF16(arr)), dtype: 'f16', out: shape[0], in: shape[1] || 1 };
+    if (kind === 'norm' || kind === 'bias') return { buf: this._a(arr), dtype: 'f32', out: shape[0], in: shape[1] || 1 };
+    return { buf: this._a(packF16(arr)), dtype: 'f16', out: shape[0], in: shape[1] || 1 };
   }
   _trainable(arr, shape, kind, name) {
     const g = this.g;
     const n = arr.length;
-    const p = { name: name || kind, buf: g.fromArray(arr), n, shape, grad: g.buffer(n * 4), m: g.buffer(n * 4), v: g.buffer(n * 4), wd: kind === 'linear' || kind === 'embed' || kind === 'lora' };
+    const p = { name: name || kind, kind, buf: this._a(arr), n, shape, grad: this._b(n * 4), m: this._b(n * 4), v: this._b(n * 4), wd: kind === 'linear' || kind === 'embed' || kind === 'lora' };
     ops.fill(g, p.grad, n, 0); ops.fill(g, p.m, n, 0); ops.fill(g, p.v, n, 0);
     this.params.push(p);
     return { buf: p.buf, dtype: 'f32', out: shape[0], in: shape[1] || 1, param: p };
   }
-  _loraFor(name, out, inn) {
+  // PEFT naming: base_model.model.<module>.lora_A.weight [r, in] / lora_B.weight [out, r].
+  _loraFor(name, out, inn, module) {
     if (!this.lora || !this.lora.targets.includes(name)) return null;
     const r = this.lora.r;
     const bound = 1 / Math.sqrt(inn);
     const A = Float32Array.from({ length: r * inn }, () => (Math.random() * 2 - 1) * bound);
     const B = new Float32Array(out * r);
-    return { r, scale: this.lora.alpha / r, A: this._trainable(A, [r, inn], 'lora', `${name}.lora_A`), B: this._trainable(B, [out, r], 'lora', `${name}.lora_B`) };
+    return { r, scale: this.lora.alpha / r, A: this._trainable(A, [r, inn], 'lora', `base_model.model.${module}.lora_A.weight`), B: this._trainable(B, [out, r], 'lora', `base_model.model.${module}.lora_B.weight`) };
   }
 
   // Loads HF safetensors weights from File objects ({name -> File} via `files`, plus optional index map).
@@ -90,29 +96,31 @@ export class LlamaModel {
       if (!w) { if (optional) return null; throw new Error(`Missing tensor ${name}`); }
       return readTensor(w.file, w.info, w.dataStart);
     };
+    const rowsOf = (name) => { const w = where.get(name); return w ? (r0, rows) => readTensorRows(w.file, w.info, w.dataStart, r0, rows) : null; };
     let done = 0; const total = cfg.L + 2;
     const tick = (t) => onProgress?.({ text: t, progress: ++done / total });
     // Embedding (sharded by rows to respect the max storage binding size).
-    const E = await get('model.embed_tokens.weight');
-    this.embed = await this._embedShards(E, cfg.V, cfg.D, this.mode === 'full');
-    const Wh = cfg.tied ? null : await get('lm_head.weight', true);
+    const E = rowsOf('model.embed_tokens.weight');
+    if (!E) throw new Error('Missing tensor model.embed_tokens.weight');
+    cfg.V = where.get('model.embed_tokens.weight').info.shape[0];
+    this.embed = await this._embedShards(E, cfg.V, cfg.D, this.mode === 'full', 'model.embed_tokens.weight');
+    const Wh = cfg.tied ? null : rowsOf('lm_head.weight');
     if (!Wh) cfg.tied = true;
-    this.lmHead = Wh ? await this._embedShards(Wh, cfg.V, cfg.D, this.mode === 'full') : this.embed;
+    this.lmHead = Wh ? await this._embedShards(Wh, cfg.V, cfg.D, this.mode === 'full', 'lm_head.weight') : this.embed;
     tick('Embeddings');
     for (let i = 0; i < cfg.L; i++) {
       const p = `model.layers.${i}.`;
       const lin = async (n, key, out, inn) => {
         const arr = await get(p + key + '.weight');
-        const W = this._frozen(arr, [out, inn], 'linear');
-        if (W.param) W.param.name = `${i}.${n}`;
+        const W = this._frozen(arr, [out, inn], 'linear', p + key + '.weight');
         const biasArr = await get(p + key + '.bias', true);
-        const bias = biasArr ? this._frozen(biasArr, [out], 'bias') : null;
-        return { W, bias, lora: this._loraFor(n, out, inn), out, in: inn, name: n };
+        const bias = biasArr ? this._frozen(biasArr, [out], 'bias', p + key + '.bias') : null;
+        return { W, bias, lora: this._loraFor(n, out, inn, p + key), out, in: inn, name: n, key: p + key };
       };
       const qd = cfg.H * cfg.hd, kvd = cfg.KVH * cfg.hd;
       const L = {
-        ln1: this._frozen(await get(p + 'input_layernorm.weight'), [cfg.D], 'norm'),
-        ln2: this._frozen(await get(p + 'post_attention_layernorm.weight'), [cfg.D], 'norm'),
+        ln1: this._frozen(await get(p + 'input_layernorm.weight'), [cfg.D], 'norm', p + 'input_layernorm.weight'),
+        ln2: this._frozen(await get(p + 'post_attention_layernorm.weight'), [cfg.D], 'norm', p + 'post_attention_layernorm.weight'),
         q: await lin('q', 'self_attn.q_proj', qd, cfg.D),
         k: await lin('k', 'self_attn.k_proj', kvd, cfg.D),
         v: await lin('v', 'self_attn.v_proj', kvd, cfg.D),
@@ -121,12 +129,12 @@ export class LlamaModel {
         up: await lin('up', 'mlp.up_proj', cfg.I, cfg.D),
         down: await lin('down', 'mlp.down_proj', cfg.D, cfg.I),
       };
-      if (cfg.qkNorm) { L.qn = this._frozen(await get(p + 'self_attn.q_norm.weight'), [cfg.hd], 'norm'); L.kn = this._frozen(await get(p + 'self_attn.k_norm.weight'), [cfg.hd], 'norm'); }
+      if (cfg.qkNorm) { L.qn = this._frozen(await get(p + 'self_attn.q_norm.weight'), [cfg.hd], 'norm', p + 'self_attn.q_norm.weight'); L.kn = this._frozen(await get(p + 'self_attn.k_norm.weight'), [cfg.hd], 'norm', p + 'self_attn.k_norm.weight'); }
       this.layers.push(L);
       tick(`Layer ${i + 1}/${cfg.L}`);
       if (i % 4 === 3) await g.sync();
     }
-    this.norm = this._frozen(await get('model.norm.weight'), [cfg.D], 'norm');
+    this.norm = this._frozen(await get('model.norm.weight'), [cfg.D], 'norm', 'model.norm.weight');
     tick('Done');
     await g.sync();
   }
@@ -139,29 +147,34 @@ export class LlamaModel {
     const normal = (n, std) => Float32Array.from({ length: n }, () => rnd() * std);
     const ones = (n) => new Float32Array(n).fill(1);
     const std = 0.02, projStd = 0.02 / Math.sqrt(2 * cfg.L);
-    this.embed = await this._embedShards(normal(cfg.V * cfg.D, std), cfg.V, cfg.D, true);
-    this.lmHead = cfg.tied ? this.embed : await this._embedShards(normal(cfg.V * cfg.D, std), cfg.V, cfg.D, true);
+    this.embed = await this._embedShards(normal(cfg.V * cfg.D, std), cfg.V, cfg.D, true, 'model.embed_tokens.weight');
+    this.lmHead = cfg.tied ? this.embed : await this._embedShards(normal(cfg.V * cfg.D, std), cfg.V, cfg.D, true, 'lm_head.weight');
     const qd = cfg.H * cfg.hd, kvd = cfg.KVH * cfg.hd;
     for (let i = 0; i < cfg.L; i++) {
-      const lin = (n, out, inn, sd) => ({ W: this._trainable(normal(out * inn, sd), [out, inn], 'linear', `${i}.${n}`), bias: null, lora: null, out, in: inn, name: n });
-      this.layers.push({
-        ln1: this._trainable(ones(cfg.D), [cfg.D], 'norm', `${i}.ln1`), ln2: this._trainable(ones(cfg.D), [cfg.D], 'norm', `${i}.ln2`),
-        q: lin('q', qd, cfg.D, std), k: lin('k', kvd, cfg.D, std), v: lin('v', kvd, cfg.D, std), o: lin('o', cfg.D, qd, projStd),
-        gate: lin('gate', cfg.I, cfg.D, std), up: lin('up', cfg.I, cfg.D, std), down: lin('down', cfg.D, cfg.I, projStd),
-      });
+      const p = `model.layers.${i}.`;
+      const lin = (n, key, out, inn, sd) => ({ W: this._trainable(normal(out * inn, sd), [out, inn], 'linear', p + key + '.weight'), bias: null, lora: null, out, in: inn, name: n, key: p + key });
+      const L = {
+        ln1: this._trainable(ones(cfg.D), [cfg.D], 'norm', p + 'input_layernorm.weight'), ln2: this._trainable(ones(cfg.D), [cfg.D], 'norm', p + 'post_attention_layernorm.weight'),
+        q: lin('q', 'self_attn.q_proj', qd, cfg.D, std), k: lin('k', 'self_attn.k_proj', kvd, cfg.D, std), v: lin('v', 'self_attn.v_proj', kvd, cfg.D, std), o: lin('o', 'self_attn.o_proj', cfg.D, qd, projStd),
+        gate: lin('gate', 'mlp.gate_proj', cfg.I, cfg.D, std), up: lin('up', 'mlp.up_proj', cfg.I, cfg.D, std), down: lin('down', 'mlp.down_proj', cfg.D, cfg.I, projStd),
+      };
+      if (cfg.qkNorm) { L.qn = this._trainable(ones(cfg.hd), [cfg.hd], 'norm', p + 'self_attn.q_norm.weight'); L.kn = this._trainable(ones(cfg.hd), [cfg.hd], 'norm', p + 'self_attn.k_norm.weight'); }
+      this.layers.push(L);
     }
-    this.norm = this._trainable(ones(cfg.D), [cfg.D], 'norm', 'norm');
+    this.norm = this._trainable(ones(cfg.D), [cfg.D], 'norm', 'model.norm.weight');
   }
 
-  async _embedShards(arr, V, D, trainable) {
+  async _embedShards(arr, V, D, trainable, name) {
     const g = this.g;
     const bytesPerRow = D * (trainable ? 4 : 2);
-    const maxRows = Math.max(1, Math.floor(Math.min(g.maxBinding, 1 << 30) / bytesPerRow / 64) * 64);
+    // Shards stay under the binding limit and ~256 MB so loading never needs one giant JS array.
+    const maxRows = Math.max(64, Math.floor(Math.min(g.maxBinding, 1 << 28) / bytesPerRow / 64) * 64);
     const shards = [];
     for (let r0 = 0; r0 < V; r0 += maxRows) {
       const rows = Math.min(maxRows, V - r0);
-      const slice = arr.subarray(r0 * D, (r0 + rows) * D);
-      const w = trainable ? this._trainable(new Float32Array(slice), [rows, D], 'embed', `embed_${r0}`) : { buf: g.fromArray(packF16(slice)), dtype: 'f16', out: rows, in: D };
+      const slice = typeof arr === 'function' ? await arr(r0, rows) : arr.subarray(r0 * D, (r0 + rows) * D);
+      const w = trainable ? this._trainable(new Float32Array(slice), [rows, D], 'embed', name) : { buf: this._a(packF16(slice)), dtype: 'f16', out: rows, in: D };
+      if (w.param) { w.param.rowStart = r0; w.param.shape = [rows, D]; }
       shards.push({ ...w, rowStart: r0, rows });
     }
     return shards;
@@ -391,13 +404,65 @@ export class LlamaModel {
     g.release(fw.xLast); g.release(fw.h); g.release(fw.rF); g.free(fw.idsBuf);
   }
 
+  // ---------- trainable state IO ----------
+  // Full tensors by name (embedding shards concatenated). which: 'buf' (weights) | 'm' | 'v'.
+  async readParams(which = 'buf') {
+    const out = new Map();
+    for (const p of this.params) {
+      const data = await this.g.readF32(p[which], p.n);
+      const prev = out.get(p.name);
+      if (prev && p.rowStart != null) {
+        const cat = new Float32Array(prev.data.length + data.length); cat.set(prev.data); cat.set(data, prev.data.length);
+        out.set(p.name, { name: p.name, shape: [prev.shape[0] + p.shape[0], p.shape[1]], data: cat });
+      } else out.set(p.name, { name: p.name, shape: p.rowStart != null ? [...p.shape] : p.shape, data });
+    }
+    return out;
+  }
+  // Loads tensors by name (Map or object name -> Float32Array) into matching trainable params.
+  writeParams(tensors, which = 'buf') {
+    if (this.cache) this.cache.ids = [];
+    const get = (n) => tensors instanceof Map ? tensors.get(n) : tensors[n];
+    let n = 0;
+    for (const p of this.params) {
+      let data = get(p.name);
+      if (!data) continue;
+      if (data.data) data = data.data;
+      if (p.rowStart != null) data = data.subarray(p.rowStart * p.shape[1], p.rowStart * p.shape[1] + p.n);
+      if (data.length !== p.n) throw new Error(`Shape mismatch for ${p.name}: ${data.length} vs ${p.n}`);
+      this.g.upload(p[which], data); n++;
+    }
+    return n;
+  }
+
+  // Trainable tensors merged by name: [{name, shape, parts: [param...]}]
+  paramSpecs() {
+    const m = new Map();
+    for (const p of this.params) {
+      const e = m.get(p.name);
+      if (e) { e.parts.push(p); e.shape = [e.shape[0] + p.shape[0], ...e.shape.slice(1)]; }
+      else m.set(p.name, { name: p.name, shape: [...p.shape], parts: [p], kind: p.kind });
+    }
+    return [...m.values()];
+  }
+  async readParam(spec, which = 'buf') {
+    if (spec.parts.length === 1) return this.g.readF32(spec.parts[0][which], spec.parts[0].n);
+    const out = new Float32Array(spec.parts.reduce((a, p) => a + p.n, 0));
+    let off = 0;
+    for (const p of spec.parts) { out.set(await this.g.readF32(p[which], p.n), off); off += p.n; }
+    return out;
+  }
+  writeParam(spec, data, which = 'buf') {
+    if (this.cache) this.cache.ids = [];
+    let off = 0;
+    for (const p of spec.parts) { this.g.upload(p[which], data.subarray(off, off + p.n)); off += p.n; }
+  }
+
   // ---------- optimizer ----------
   async gradNorm() {
-    let s = 0;
-    for (const p of this.params) s += await ops.sumsq(this.g, p.grad, p.n);
-    return Math.sqrt(s);
+    return Math.sqrt(await ops.sumsqMany(this.g, this.params.map(p => [p.grad, p.n])));
   }
   step({ step, lr, wd = 0, clip = 1, gnorm, b1 = 0.9, b2 = 0.999, eps = 1e-8, gscale = 1 }) {
+    if (this.cache) this.cache.ids = []; // weights change, cached keys/values go stale
     const scale = gscale * (clip && gnorm > clip ? clip / gnorm : 1);
     for (const p of this.params) ops.adamw(this.g, p.buf, p.grad, p.m, p.v, p.n, { step, lr, b1, b2, eps, wd: p.wd ? wd : 0, gscale: scale });
   }
@@ -408,7 +473,7 @@ export class LlamaModel {
   allocCache(maxT) {
     const g = this.g, c = this.cfg, kvd = c.KVH * c.hd;
     this.freeCache();
-    this.cache = { maxT, pos: 0, K: [], V: [] };
+    this.cache = { maxT, pos: 0, K: [], V: [], ids: [] };
     for (let i = 0; i < c.L; i++) { this.cache.K.push(g.buffer(maxT * kvd * 4)); this.cache.V.push(g.buffer(maxT * kvd * 4)); }
   }
   freeCache() { if (this.cache) { for (const b of [...this.cache.K, ...this.cache.V]) this.g.free(b); this.cache = null; } }
@@ -461,33 +526,46 @@ export class LlamaModel {
     for (const b of [x, last, rr, logits]) g.release(b);
     g.free(idsBuf);
     this.cache.pos += T;
+    for (const id of ids) this.cache.ids.push(id);
     return out;
   }
 
-  // Sampling loop. Returns generated token ids (stops at any id in `stop`).
-  async generate(promptIds, { maxNew = 256, temperature = 0.7, topP = 0.9, topK = 50, stop = [], onToken, signal, repetitionPenalty = 1.05 } = {}) {
-    const total = Math.min(this.cfg.maxPos, promptIds.length + maxNew + 1);
-    if (!this.cache || this.cache.maxT < total) this.allocCache(Math.max(total, 512));
-    this.cache.pos = 0;
-    let logits = await this.forwardInfer(promptIds);
+  // Sampling loop with prefix reuse of the KV cache. Returns generated token ids (stops at any id in `stop`).
+  async generate(promptIds, { maxNew = 256, temperature = 0.7, topP = 0.9, topK = 50, stop = [], onToken, signal, repetitionPenalty = 1.05, reuse = true, chunk = 512 } = {}) {
+    const want = Math.min(this.cfg.maxPos, promptIds.length + maxNew + 1);
+    if (!this.cache || this.cache.maxT < want) this.allocCache(Math.min(this.cfg.maxPos, Math.max(want, 1024)));
+    maxNew = Math.max(0, Math.min(maxNew, this.cache.maxT - promptIds.length - 1));
+    if (promptIds.length >= this.cache.maxT) throw new Error(`Prompt (${promptIds.length} tokens) is longer than the context (${this.cache.maxT}).`);
+    let common = 0;
+    if (reuse) { const prev = this.cache.ids; while (common < prev.length && common < promptIds.length - 1 && prev[common] === promptIds[common]) common++; }
+    this.cache.pos = common; this.cache.ids = promptIds.slice(0, common);
+    let logits;
+    for (let i = common; i < promptIds.length; i += chunk) {
+      if (signal?.aborted) throw new DOMException('Stopped', 'AbortError');
+      logits = await this.forwardInfer(promptIds.slice(i, Math.min(promptIds.length, i + chunk)));
+    }
+    this.lastPrefill = promptIds.length - common;
     const out = [];
     const seen = new Set(promptIds.slice(-64));
     for (let i = 0; i < maxNew; i++) {
       if (signal?.aborted) break;
       const id = sample(logits, { temperature, topP, topK, repetitionPenalty, seen });
-      if (stop.includes(id)) break;
+      if (stop.includes(id)) { this.stopped = id; break; }
       out.push(id); seen.add(id);
-      onToken?.(id, out);
+      if (onToken?.(id, out) === false) break;
       if (this.cache.pos >= this.cache.maxT - 1) break;
       logits = await this.forwardInfer([id]);
     }
     return out;
   }
 
-  destroy() {
+  // Frees every GPU buffer this model owns (the device stays usable for the next model).
+  free() {
     this.freeCache();
+    for (const b of this.owned) this.g.free(b);
+    this.owned = []; this.params = []; this.layers = [];
+    this.g.flush();
     this.g.trimPool();
-    try { this.g.device.destroy(); } catch {}
   }
 }
 
