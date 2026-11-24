@@ -52,6 +52,14 @@ if (!only || only === 'linux') {
     const vfs = await import('./src/core/vfs.js');
     const out = {};
     const run = async (cmd) => { let s = ''; const code = await L.linuxRun(cmd, { io: { out: (x) => { s += x; }, err: (x) => { s += x; } }, cwd: '/workspace' }); return { code, s }; };
+    // First-launch auto-install from the image bundled with the app (same origin; checksum verified).
+    const urls = [];
+    const origFetch = window.fetch; window.fetch = (u, ...a) => { urls.push(String(u?.url || u)); return origFetch(u, ...a); };
+    out.auto = await L.autoInstall({ force: true });
+    window.fetch = origFetch;
+    out.autoUrls = urls;
+    out.manifest = await vfs.readJSON('/runtimes/linux/manifest.json', null);
+    out.autoAgain = await L.autoInstall({ force: true });
     let t = performance.now();
     out.uname = await run('uname -sm');
     out.firstBootMs = performance.now() - t;
@@ -75,6 +83,8 @@ if (!only || only === 'linux') {
     return out;
   });
   console.log(`[${((Date.now() - t0) / 1000).toFixed(0)}s] first boot ${(r.firstBootMs / 1000).toFixed(0)}s, snapshot restore ${(r.restoreMs / 1000).toFixed(1)}s`);
+  check('linux: auto-install from the bundled image', r.auto?.version && r.manifest?.sha256 === r.auto.sha256 && r.autoUrls.every(u => u.startsWith('http://localhost')), JSON.stringify({ v: r.manifest?.version, urls: r.autoUrls }));
+  check('linux: auto-install runs only once', r.autoAgain === null);
   check('linux: uname', r.uname.code === 0 && /Linux i686/.test(r.uname.s), r.uname.s);
   check('linux: arithmetic', r.math.s.trim() === '42', r.math.s);
   check('linux: exit status', r.fail.code === 1);

@@ -237,7 +237,7 @@ const RUNTIMES = [
     install: async () => (await import('../../runtimes/python.js')).install() },
   { id: 'ffmpeg', name: 'ffmpeg', blurb: 'Audio/video conversion and editing for the Media tool.', size: '~32 MB',
     install: async () => (await import('../../agent/tools/media.js')).ensureFfmpeg() },
-  { id: 'linux', name: 'Linux VM (Alpine)', blurb: 'A real Linux shell in the terminal: type linux, or linux <command>.', size: '~50 MB',
+  { id: 'linux', name: 'Linux VM (Alpine)', blurb: 'A real Linux shell in the terminal: type linux, or linux <command>. The image ships with the app and installs automatically on first launch.', size: '49 MB',
     install: async () => (await import('../../runtimes/linux.js')).install() },
 ];
 function Runtimes() {
@@ -251,7 +251,11 @@ function Runtimes() {
     setBusy(r.id);
     try {
       if (what === 'install') { await r.install(); toast(`${r.name} is ready offline`, 'ok'); }
-      else { if (r.id === 'linux') await (await import('../../runtimes/linux.js')).shutdown(); await vfs.rm('/runtimes/' + r.id); toast(`${r.name} removed`); }
+      else {
+        // Removing Linux also stops the automatic first-launch install from bringing it back.
+        if (r.id === 'linux') { await (await import('../../runtimes/linux.js')).shutdown(); setSetting('linux.autoInstall', false); }
+        await vfs.rm('/runtimes/' + r.id); toast(`${r.name} removed`);
+      }
     } catch (e) { toast(String(e.message || e), 'err', 7000); }
     setBusy(null); load();
   };

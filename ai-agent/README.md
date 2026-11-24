@@ -17,17 +17,16 @@ panes and a single pane.
 
 ## Install on your iPhone
 
-1. **Publish it** (one time). On GitHub: *Settings → Pages → Build and deployment → Source: **GitHub Actions***. The
-   included workflow (`.github/workflows/pages.yml`) deploys the repository on every push to `main`. It also publishes
-   the checksum-verified Alpine Linux image next to the app, so the Linux VM can download it (Alpine's own mirror
-   blocks downloads from web pages). After a minute it's live at `https://<your-user>.github.io/<repo>/ai-agent/`.
-   *Deploy from a branch* also works. Everything except the automatic Linux download does; get the image through
-   your proxy (Settings → Web) or with Settings → Storage & offline → Runtimes → *Import ISO* instead.
+1. **Publish it** (one time). On GitHub: *Settings → Pages → Build and deployment → Deploy from a branch*, branch
+   `main`, folder `/ (root)`. After a minute it's live at `https://<your-user>.github.io/<repo>/ai-agent/`.
 2. On the iPhone, open that address in **Safari**.
 3. Tap **Share → Add to Home Screen**. Launch it from the Home Screen icon: it opens full screen and works offline.
 4. First launch:
    - The app asks iOS to keep its storage (Settings → Storage & offline shows the result), so iOS doesn't evict your
      models.
+   - The **Linux VM** installs itself in the background (the official Alpine Linux image ships with the app in
+     `ai-agent/runtimes/`, 49 MB, one time). Type `linux` in the Code tab's terminal; the first start boots for about a
+     minute, later starts take a second.
    - **Studio → Models**: download a model. *Qwen3 4B Instruct* (2.5 GB) is the recommended agent model. For training,
      download one from **For training** (e.g. *SmolLM2 360M* or *Qwen2.5 0.5B*).
    - Optional: **Settings → Keys** for cloud models (Anthropic, OpenAI-compatible), a Hugging Face token (private repos,

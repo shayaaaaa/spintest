@@ -65,7 +65,7 @@ Hub/
   datasets/<name>/ data.jsonl + meta.json
   training/runs/<run>/ config.json, log.jsonl, checkpoints/
   chats/<id>.json       conversations (agent, chat, code panel)
-  runtimes/ pyodide/ linux/ ffmpeg/   on-demand downloaded runtimes
+  runtimes/ pyodide/ linux/ ffmpeg/   runtimes (Linux installs on first launch; Python and ffmpeg on first use)
   settings/ settings.json, secrets.json, permissions.json, mcp.json
   workspace/<project>/  user projects; each may have AGENT.md and .hub/{skills,agents,commands,memory}
   trash/
@@ -137,9 +137,10 @@ Verification:
   the isomorphic-git CORS proxy; tokens come from Settings → Keys.
 - `src/runtimes/linux.js`: Alpine Linux (official x86 *virt* ISO, SHA-256 verified) in v86, driven over the serial
   console with exit-status markers. A snapshot after first boot makes later starts take seconds. `--put`/`--get`
-  move files between the Hub and the VM. The Alpine mirror sends no CORS headers, so the image comes from a
-  same-origin copy that `.github/workflows/pages.yml` publishes at deploy time. The fallbacks are the user's proxy,
-  a direct download, or importing an ISO file.
+  move files between the Hub and the VM. The Alpine mirror sends no CORS headers, so the official ISO ships with the
+  app (`ai-agent/runtimes/alpine.iso` + `alpine.json` with its SHA-256). `autoInstall()` copies it into the Hub
+  shortly after the first launch, skipping offline, Data Saver, automation, or when the user removed it. The
+  fallbacks are the user's proxy, a direct download, or importing an ISO file.
 
 ## Testing environment notes
 

@@ -17,8 +17,8 @@ const setState = (patch) => linuxStore.set(patch);
 
 export async function isInstalled() { return !!(await vfs.readJSON(`${DIR}/manifest.json`, null))?.iso; }
 
-// Where the ISO can come from, in order: a same-origin copy published with the app (GitHub Pages workflow), the
-// user's CORS proxy (Settings → Web), then the Alpine mirror directly (it sends no CORS headers, so browsers block it).
+// Where the ISO can come from, in order: the copy bundled with the app (ai-agent/runtimes/, same origin), the user's
+// CORS proxy (Settings → Web), then the Alpine mirror directly (it sends no CORS headers, so browsers block it).
 async function fetchVia(url) {
   const { proxyUrl } = await import('../core/net.js');
   const proxy = proxyUrl();
@@ -34,15 +34,36 @@ async function locateISO() {
   } catch {}
   let yaml;
   try { yaml = await (await fetchVia(MIRROR + 'latest-releases.yaml')).text(); }
-  catch { throw new Error('Could not reach the Alpine Linux mirror from the browser (it blocks cross-origin downloads). Options: deploy the app with the included GitHub Pages workflow (it publishes the image next to the app), set your proxy in Settings → Web, or download alpine-virt-…-x86.iso in Safari and use Settings → Storage & offline → Runtimes → Import ISO.'); }
+  catch { throw new Error('This copy of the app has no bundled Linux image, and the Alpine Linux mirror blocks downloads from web pages. Set your proxy in Settings → Web, or download alpine-virt-…-x86.iso in Safari and use Settings → Storage & offline → Runtimes → Import ISO.'); }
   const block = yaml.split('\n-').find(b => /flavor: alpine-virt\b/.test(b));
   const file = /\bfile: (\S+\.iso)/.exec(block || '')?.[1];
   if (!file) throw new Error('Could not find the Alpine virt ISO on the mirror.');
   return { url: MIRROR + file, file, sha256: /\bsha256: ([0-9a-f]{64})/.exec(block)?.[1], version: /\bversion: (\S+)/.exec(block)?.[1] };
 }
 
-export async function install(onProgress = () => {}) {
-  setState({ state: 'downloading', progress: 0, text: 'Finding the latest Alpine Linux…' });
+// One install at a time (the automatic first-launch install and a tap in Settings share it).
+let installing = null;
+export function install(onProgress = () => {}) {
+  installing ||= doInstall(onProgress).finally(() => { installing = null; });
+  return installing;
+}
+
+// Installs the Linux image that ships with the app, once, in the background on first launch. Skipped when the
+// user turned it off (Settings → Runtimes), when Data Saver is on, offline, or in automated test browsers.
+export async function autoInstall({ force = false } = {}) {
+  if (!force) {
+    if (settings.get().linux?.autoInstall === false) return null;
+    if (navigator.webdriver || !navigator.onLine || navigator.connection?.saveData) return null;
+  }
+  if (await isInstalled()) return null;
+  const meta = await fetch(new URL('../../runtimes/alpine.json', import.meta.url), { cache: 'no-store' }).then(r => r.ok ? r.json() : null).catch(() => null);
+  if (!meta?.file) return null; // not bundled with this deployment
+  await install();
+  return meta;
+}
+
+async function doInstall(onProgress) {
+  setState({ state: 'downloading', progress: 0, text: 'Preparing Alpine Linux…' });
   try {
     const src = await locateISO();
     const r = src.sameOrigin ? await fetch(src.url) : await fetchVia(src.url);
