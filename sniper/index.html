@@ -83,20 +83,49 @@ body.focus #vFocus { opacity: 1; }
 .item .cnt { position: absolute; right: -5px; bottom: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--brass); color: #1a1406; font-size: 13px; font-weight: 800; display: grid; place-items: center; }
 .item.empty { opacity: .35; }
 .item.active { box-shadow: 0 0 0 3px rgba(80, 150, 240, .7); }
-#feed { position: absolute; right: calc(12px + var(--sar)); top: calc(120px + var(--sat)); display: grid; gap: 3px; justify-items: end; }
-#feed div { font-size: 14px; font-weight: 800; letter-spacing: .06em; background: rgba(0, 0, 0, .5); padding: 2px 8px; border-radius: 3px; animation: feed 2.6s forwards; white-space: nowrap; }
+#feed { display: grid; gap: 3px; justify-items: center; }
+#feed div { font-size: 13px; font-weight: 800; letter-spacing: .06em; background: rgba(0, 0, 0, .5); padding: 2px 8px; border-radius: 3px; animation: feed 2.6s forwards; white-space: nowrap; }
 #feed .head { color: #ff8a5a; } #feed .gold { color: var(--brass); } #feed .good { color: var(--medic); } #feed .bad { color: #ff6a5a; } #feed .dim { color: var(--muted); }
 @keyframes feed { 0% { opacity: 0; transform: translateX(20px); } 8% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
-#cross { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; filter: drop-shadow(0 0 1.5px #000);
-  background: linear-gradient(#fff, #fff) center top / 2px 11px no-repeat, linear-gradient(#fff, #fff) center bottom / 2px 11px no-repeat,
-  linear-gradient(#fff, #fff) left center / 11px 2px no-repeat, linear-gradient(#fff, #fff) right center / 11px 2px no-repeat,
-  radial-gradient(circle, #fff 1.6px, transparent 2px) center / 6px 6px no-repeat; opacity: .9; }
+#cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --g: 6px; filter: drop-shadow(0 0 1.5px #000); }
+#cross i { position: absolute; background: rgba(255, 255, 255, .92); }
+#cross i:nth-child(1), #cross i:nth-child(2) { width: 2px; height: 11px; left: -1px; }
+#cross i:nth-child(3), #cross i:nth-child(4) { width: 11px; height: 2px; top: -1px; }
+#cross i:nth-child(1) { top: calc(-1 * var(--g) - 11px); }
+#cross i:nth-child(2) { top: var(--g); }
+#cross i:nth-child(3) { left: calc(-1 * var(--g) - 11px); }
+#cross i:nth-child(4) { left: var(--g); }
+#cross b { position: absolute; left: -1.5px; top: -1.5px; width: 3px; height: 3px; border-radius: 50%; background: #fff; }
+/* reflex sight shown while aiming any non-sniper weapon */
+#sight { display: none; position: absolute; left: 50%; top: 50%; width: 176px; height: 128px; margin: -64px 0 0 -88px; border-radius: 22px;
+  border: 12px solid rgba(16, 18, 16, .94); box-shadow: inset 0 0 22px rgba(0, 0, 0, .5), 0 3px 10px rgba(0, 0, 0, .35);
+  background: radial-gradient(ellipse at 32% 22%, rgba(200, 235, 245, .12), rgba(120, 170, 190, .05) 55%, transparent 80%); }
+#sight::before { content: ""; position: absolute; left: 50%; bottom: -24px; width: 60px; height: 12px; margin-left: -30px; border-radius: 0 0 6px 6px; background: rgba(16, 18, 16, .94); }
+#sight .ring { position: absolute; left: 50%; top: 50%; width: 34px; height: 34px; margin: -17px 0 0 -17px; border-radius: 50%; border: 1.5px solid rgba(255, 86, 56, .5); }
+#sight .dot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ff3a26; box-shadow: 0 0 8px #ff3a26, 0 0 2px #fff; }
+#sight svg { display: none; position: absolute; inset: 0; width: 100%; height: 100%; }
+body.sighted #sight { display: block; }
+body.sighted #cross { display: none; }
+body.rsight #sight .ring, body.rsight #sight .dot { display: none; }
+body.rsight #sight svg { display: block; }
+#wbar { position: absolute; right: calc(10px + var(--sar)); top: calc(116px + var(--sat)); display: flex; gap: 6px; }
+.wslot { position: relative; width: 46px; height: 38px; border-radius: 8px; background: rgba(10, 12, 9, .62); border: 1.5px solid rgba(255, 255, 255, .24); color: var(--bone); display: grid; place-items: center; }
+.wslot svg { width: 34px; height: 17px; }
+.wslot.on { border-color: var(--brass); background: rgba(240, 177, 58, .28); color: #fff3d6; }
+.wslot.empty { color: #ff8a7a; }
+.wslot .rl { position: absolute; left: 5px; right: 5px; bottom: 3px; height: 3px; border-radius: 2px; background: rgba(255, 255, 255, .12); display: none; }
+.wslot.loading .rl { display: block; }
+.wslot .rl b { display: block; height: 100%; width: 0; border-radius: 2px; background: var(--brass); }
+.abar { display: block; width: 64px; height: 7px; border-radius: 4px; background: rgba(255, 255, 255, .15); overflow: hidden; }
+.abar b { display: block; height: 100%; background: linear-gradient(90deg, #b07a1c, #f4cf6a); }
+#reloadHint { color: var(--muted); }
+#reloadHint.busy { color: var(--brass); }
 #hit { position: absolute; left: 50%; top: 50%; width: 30px; height: 30px; margin: -15px 0 0 -15px; opacity: 0; }
 #hit::before, #hit::after { content: ""; position: absolute; left: 14px; top: -3px; width: 2.5px; height: 36px; background: linear-gradient(#fff 0 30%, transparent 30% 70%, #fff 70%); }
 #hit::before { transform: rotate(45deg); } #hit::after { transform: rotate(-45deg); }
 #hit.on { animation: hit .3s; } #hit.kill::before, #hit.kill::after { background: linear-gradient(#ff4a3a 0 30%, transparent 30% 70%, #ff4a3a 70%); }
 @keyframes hit { 0% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(1); } }
-#big { position: absolute; left: 0; right: 0; top: 28%; text-align: center; font-family: var(--display); font-size: clamp(30px, 7vw, 54px); letter-spacing: .04em; opacity: 0; text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
+#big { position: absolute; left: 0; right: 0; top: 31%; text-align: center; font-family: var(--display); font-size: clamp(30px, 7vw, 54px); letter-spacing: .04em; opacity: 0; text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
 #big.on { animation: big 1s forwards; }
 #big.head { color: #ff5f3a; } #big.gold { color: var(--brass); } #big.bad { color: #ff4a3a; }
 @keyframes big { 0% { opacity: 0; transform: scale(1.8); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
@@ -203,6 +232,9 @@ body.scoped #cross { display: none; }
 .showcase p { margin: 0; color: var(--bone); max-width: 40ch; font-size: 15px; line-height: 1.35; text-shadow: 0 1px 3px #000, 0 0 8px rgba(0, 0, 0, .6); }
 .showcase h2 { text-shadow: 0 2px 0 rgba(0, 0, 0, .55), 0 0 12px rgba(0, 0, 0, .5); }
 .rifles { display: flex; gap: 6px; flex-wrap: wrap; }
+.tab.cls { padding: 0 10px; gap: 6px; font-size: 13px; }
+.tab.cls svg { width: 24px; height: 12px; flex: none; }
+@media (max-width: 820px) { .tab.cls svg { display: none; } }
 .rf { height: 36px; padding: 0 10px; border-radius: 5px; background: rgba(0, 0, 0, .5); border: 1px solid var(--line); font-size: 13px; font-weight: 800; letter-spacing: .06em; display: flex; align-items: center; gap: 6px; }
 .rf.on { border-color: var(--brass); color: var(--brass); }
 .rf i { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
@@ -313,6 +345,7 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
     <div class="tc">
       <div class="bar wall" id="wallBar"><div class="fill" id="wallFill"></div><span><em style="font-style:normal">WALL</em><b id="wallNum">1000</b></span></div>
       <div class="bar boss" id="bossBar" hidden><div class="fill" id="bossFill"></div><span><em style="font-style:normal" id="bossName">BUTCHER</em><b id="bossNum"></b></span></div>
+      <div id="feed"></div>
     </div>
     <div class="tr"><div id="cash">$0</div>
       <button class="round" id="btnPause" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
@@ -322,14 +355,17 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
       <button class="item" data-item="strike" aria-label="Mortar strike"><svg viewBox="0 0 24 24" fill="none" stroke="#f0b13a" stroke-width="2"><path d="M12 2c2 3 3 6 3 9a3 3 0 0 1-6 0c0-3 1-6 3-9zM9 15l-1 4h8l-1-4M7 22h10"/></svg><span class="cnt">0</span></button>
       <button class="item" data-item="repair" aria-label="Repair wall"><svg viewBox="0 0 24 24" fill="none" stroke="#7bd66a" stroke-width="2"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.2L3 17.8 6.2 21l6.3-6.3a4 4 0 0 0 5.2-5.4l-2.6 2.6-2.4-.6-.6-2.4z"/></svg><span class="cnt">0</span></button>
     </div>
-    <div id="feed"></div>
-    <div id="cross"></div>
+    <div id="wbar"></div>
+    <div id="cross"><i></i><i></i><i></i><i></i><b></b></div>
+    <div id="sight"><i class="ring"></i><i class="dot"></i>
+      <svg viewBox="0 0 152 104" fill="none" stroke="#ff8a3a" stroke-width="1.6"><path d="M66 58l10-8 10 8"/><path d="M76 50v-6"/><path d="M60 68h32M64 78h24M68 88h16"/><path d="M20 52h28M104 52h28"/></svg>
+    </div>
     <div id="hit"></div>
     <div id="big"></div>
     <div id="banner"><h2></h2><p></p></div>
     <div id="zoomBox" hidden><small>ZOOM</small><div id="zoomTrack"><div id="zoomKnob"></div></div><div id="zoomLbl">4.0×</div></div>
     <div class="br">
-      <div id="ammo"><div id="reloadHint" hidden>RELOADING</div><div id="ammoNum">5<small>/5</small></div><div id="rounds"></div></div>
+      <div id="ammo"><div id="reloadHint"></div><div id="ammoNum">5<small>/5</small></div><div id="rounds"></div></div>
       <button class="round" id="btnReload" aria-label="Reload"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M20 12a8 8 0 1 1-2.3-5.7M20 4v4h-4"/></svg></button>
       <button class="round" id="btnScope" aria-label="Scope"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="8"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></button>
       <button id="btnFire" aria-label="Fire"><svg viewBox="0 0 24 24" fill="#ffe7d6"><path d="M12 2c1.6 1.4 2.5 3.6 2.5 6v9h-5V8c0-2.4.9-4.6 2.5-6zM9 18.5h6V22H9z"/></svg></button>
@@ -376,8 +412,8 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
   <section class="screen" id="armory" style="background: linear-gradient(90deg, rgba(8, 10, 7, .25), rgba(8, 10, 7, .35) 45%, rgba(8, 10, 7, .7))" hidden>
     <div class="topbar"><button class="back" data-go="back"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 5l-7 7 7 7"/></svg>BACK</button><h1>Armory</h1><div class="money" data-cash>$0</div></div>
     <div class="cols">
-      <div class="showcase"><h2 id="rfName"></h2><p id="rfDesc"></p><div class="rifles" id="rfList"></div></div>
-      <div class="panel" id="shopPanel"><div class="tabs"><button class="tab on" data-shop="rifle">Rifle</button><button class="tab" data-shop="supplies">Supplies</button></div><div id="shopBody"></div></div>
+      <div class="showcase"><div class="tabs" id="clsTabs"></div><div style="flex:1"></div><h2 id="rfName"></h2><p id="rfDesc"></p><div class="rifles" id="rfList"></div></div>
+      <div class="panel" id="shopPanel"><div class="tabs"><button class="tab on" data-shop="rifle">Weapon</button><button class="tab" data-shop="supplies">Supplies</button></div><div id="shopBody"></div></div>
     </div>
   </section>
 
@@ -397,7 +433,9 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
         <b>How to play</b>
         <ol>
           <li>Drag anywhere to aim. Tap the scope to zoom in; slide the zoom bar for more or less magnification.</li>
-          <li>Tap the red button to fire. Bolt-action rifles need a moment between shots.</li>
+          <li>Tap the red button to fire. Bolt-action rifles need a moment between shots. Automatics fire as long as you hold the button.</li>
+          <li>You carry one weapon of each class you own: sniper, automatic, pistol and rocket launcher. Switch with the weapon bar under the item buttons. A reload keeps going after you switch away.</li>
+          <li>Rockets never run out, but each load takes a while. A rocket that lands next to your own wall damages it.</li>
           <li>Headshots deal triple damage and pay 50% more. Soldiers' helmets stop the first shot to the top of the head, so aim for the face.</li>
           <li>Shoot bloaters before they reach the wall. Their blast hurts anything close by.</li>
           <li>In rescue missions, survivors have a green marker. Don't hit them.</li>

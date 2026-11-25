@@ -1,5 +1,5 @@
 // Menus, HUD, scope overlay, radar and input wiring.
-import { RIFLES, UPGRADES, ITEMS, WALL_LEVELS, MAPS, LEVELS, ZOMBIES, BASE_FOV, rifleStats, upgradeCost, levelObjective } from './data.js';
+import { WEAPONS, CLASSES, UPGRADES, ITEMS, WALL_LEVELS, MAPS, LEVELS, ZOMBIES, weaponStats, weaponById, upgradeCost, upgradeInfo, levelObjective } from './data.js';
 import { save, persist, resetSave, upgOf } from './save.js';
 
 const $ = id => document.getElementById(id);
@@ -14,6 +14,13 @@ const ICON = {
   lock: '<svg class="ty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 const TYPE_NAME = { defend: 'Defend', rescue: 'Rescue', boss: 'Boss' };
+// Weapon class silhouettes for the HUD weapon bar and armory tabs.
+const WICON = {
+  sniper: '<svg viewBox="0 0 48 24" fill="currentColor"><path d="M2 12.5h27l2-1.5h15v2.5H33l-2 1.5h-9l-2.5 5h-4l1.5-5H2z"/><rect x="13" y="7.5" width="13" height="3" rx="1.5"/><rect x="17" y="10" width="2" height="2"/></svg>',
+  auto: '<svg viewBox="0 0 48 24" fill="currentColor"><path d="M4 11h26l2-1.5h11v2.5H32v2.5h-6l-1 2.5 1.5 4h-4l-1.5-4 .6-2.5H18l-2 4h-4l1.6-4H4z"/><rect x="17" y="7" width="7" height="3" rx="1"/></svg>',
+  pistol: '<svg viewBox="0 0 48 24" fill="currentColor"><path d="M12 7h24v5.5H25l-2.5 9h-6l2.4-9H12z"/><rect x="20" y="13" width="4" height="2"/></svg>',
+  rocket: '<svg viewBox="0 0 48 24" fill="currentColor"><path d="M3 9.5h33v5H3z"/><path d="M36 8.5l9 3.5-9 3.5z"/><rect x="14" y="14.5" width="3.5" height="6" rx="1"/><rect x="6" y="6" width="6" height="3.5"/></svg>',
+};
 
 export class UI {
   constructor() {
@@ -23,7 +30,8 @@ export class UI {
     this.selMap = LEVELS[this.selLevel].map;
     this.survMap = 0;
     this.shopTab = 'rifle';
-    this.shopRifle = save.equipped;
+    this.shopCls = 'sniper';
+    this.shopRifle = save.loadout.sniper;
     this.portraitOk = false;
     this.cache = {};
     this.frameN = 0;
@@ -105,6 +113,12 @@ export class UI {
     fire.addEventListener('pointercancel', endFire);
 
     $('btnScope').addEventListener('pointerdown', e => { e.preventDefault(); g.toggleScope(); });
+    $('wbar').addEventListener('pointerdown', e => {
+      const b = e.target.closest('.wslot');
+      if (!b) return;
+      e.preventDefault();
+      g.switchWeapon(b.dataset.cls);
+    });
     $('btnReload').addEventListener('pointerdown', e => { e.preventDefault(); g.startReload(); });
     $('btnPause').addEventListener('click', () => this.pause());
     for (const b of document.querySelectorAll('.item')) {
@@ -128,9 +142,10 @@ export class UI {
         if (k === ' ' || k === 'f') { g.fire(); e.preventDefault(); }
         else if (k === 'e' || k === 'q' || k === 'shift') g.toggleScope();
         else if (k === 'r') g.startReload();
-        else if (k === '1') g.useItem('focus');
-        else if (k === '2') g.useItem('strike');
-        else if (k === '3') g.useItem('repair');
+        else if (k >= '1' && k <= '4') g.switchWeapon(CLASSES[+k - 1].key);
+        else if (k === 'z') g.useItem('focus');
+        else if (k === 'x') g.useItem('strike');
+        else if (k === 'c') g.useItem('repair');
         else if (k === 'escape' || k === 'p') this.pause();
       } else if (this.screen === 'pause' && (k === 'escape' || k === 'p')) this.resume();
     });
@@ -210,14 +225,14 @@ export class UI {
   }
 
   show(name) {
-    if (this.screen === 'armory' && name !== 'armory') { this.g.gun.showcase = false; this.g.equip(save.equipped); }
+    if (this.screen === 'armory' && name !== 'armory') { this.g.gun.showcase = false; this.g.refreshLoadout(); }
     for (const id of ['menu', 'campaign', 'survival', 'armory', 'settings', 'pause', 'result']) $(id).hidden = id !== name;
     this.screen = name;
     $('hud').hidden = name !== null;
     if (name === 'menu') this.renderMenu();
     if (name === 'campaign') this.renderCampaign();
     if (name === 'survival') this.renderSurvival();
-    if (name === 'armory') { this.shopRifle = save.equipped; this.renderArmory(); this.g.gun.showcase = true; }
+    if (name === 'armory') { this.shopRifle = save.loadout[this.shopCls] || WEAPONS.find(w => w.cls === this.shopCls).id; this.renderArmory(); this.g.gun.showcase = true; }
     if (name === 'settings') this.syncSettings();
     if (name === null) { this.cache = {}; this.feedClear(); }
     this.updateCash();
@@ -269,7 +284,6 @@ export class UI {
       (L.boss ? `<span class="chip" style="border-color:#ff6a5a"><b>1</b> ${L.boss.name}</span>` : '') +
       (L.survivors ? `<span class="chip" style="border-color:#7bd66a"><b>${L.survivors}</b> Survivors</span>` : '');
     const st = save.stars[L.i] || 0;
-    const R = RIFLES.find(r => r.id === save.equipped);
     const reward = st > 0 ? Math.round(L.reward * 0.5) : L.reward;
     $('levelDetail').innerHTML = `
       <div class="lbl">Mission ${String(L.i + 1).padStart(2, '0')} · ${TYPE_NAME[L.type]}</div>
@@ -277,7 +291,7 @@ export class UI {
       <p>${levelObjective(L)}</p>
       <div class="chips">${chips}</div>
       <div class="row kv"><span>Reward up to <b>${fmt(reward)}</b>${st > 0 ? ' (replay)' : ''}</span><span class="st" style="display:flex;gap:2px">${STAR(st >= 1)}${STAR(st >= 2)}${STAR(st >= 3)}</span></div>
-      <div class="row kv"><span>Rifle <b>${R.name}</b></span><button class="back" data-go="armory" style="height:34px">ARMORY</button></div>
+      <div class="row kv"><span>Loadout <b>${this.loadoutText()}</b></span><button class="back" data-go="armory" style="height:34px;flex:none">ARMORY</button></div>
       <button class="btn primary" id="startBtn">Start mission</button>`;
     for (const s of $('levelDetail').querySelectorAll('.st svg')) { s.style.width = '18px'; s.style.height = '18px'; }
     $('startBtn').addEventListener('click', () => {
@@ -304,25 +318,67 @@ export class UI {
       <div class="lbl">Endless · ${M.sub}</div>
       <h2>${M.name}</h2>
       <p>Waves never stop. Each one adds more runners, brutes and soldiers.</p>
-      <div class="row kv"><span>Best <b>${save.best[M.id] || 0} waves</b></span><span>Rifle <b>${RIFLES.find(r => r.id === save.equipped).name}</b></span></div>
+      <div class="row kv"><span>Best <b>${save.best[M.id] || 0} waves</b></span></div>
+      <div class="row kv"><span>Loadout <b>${this.loadoutText()}</b></span><button class="back" data-go="armory" style="height:34px;flex:none">ARMORY</button></div>
       <button class="btn primary" id="survStart">Start survival</button>`;
     $('survStart').addEventListener('click', () => { this.audio.ui(); this.g.startSurvival(this.survMap); this.show(null); });
   }
 
+  loadoutText() {
+    return CLASSES.map(c => save.loadout[c.key] && save.owned[save.loadout[c.key]] ? weaponById(save.loadout[c.key]).name : null)
+      .filter(Boolean).join(' · ');
+  }
+
+  statBars(st) {
+    const bar = (name, f, v) => `<div class="stat"><span>${name}</span><span class="t"><i style="width:${Math.round(clamp(f, 0.04, 1) * 100)}%"></i></span><span class="v">${v}</span></div>`;
+    const rate = Math.round(60 / st.bolt);
+    const range = st.falloff ? st.falloff[1] : 0;
+    const ctrl = st.spreadMax ? Math.round((1 - st.spreadMax / 0.05) * 100) : 0;
+    const rows = {
+      sniper: [['DAMAGE', st.dmg / 420, st.dmg], ['ZOOM', st.zoom / 12, st.zoom + '×'], ['FIRE RATE', (1 / st.bolt) / 3.2, rate + '/m'],
+        ['MAGAZINE', st.mag / 16, st.mag], ['RELOAD', (3.4 - st.reload) / 2.2, st.reload.toFixed(1) + 's'],
+        ['STABILITY', (1.4 - st.sway) / 1.1, Math.round((1.4 - st.sway) / 1.1 * 100)], ['PIERCE', st.pen / 3, st.pen]],
+      auto: [['DAMAGE', st.dmg / 100, st.dmg], ['FIRE RATE', rate / 800, rate + '/m'], ['MAGAZINE', st.mag / 160, st.mag],
+        ['RELOAD', (6 - st.reload) / 4.5, st.reload.toFixed(1) + 's'], ['RANGE', range / 130, range + ' m'],
+        ['CONTROL', ctrl / 100, ctrl], ['ZOOM', st.zoom / 4, st.zoom + '×']],
+      pistol: [['DAMAGE', st.dmg / 180, st.dmg], ['FIRE RATE', rate / 950, rate + '/m'], ['MAGAZINE', st.mag / 40, st.mag],
+        ['RELOAD', (2.6 - st.reload) / 2, st.reload.toFixed(1) + 's'], ['RANGE', range / 100, range + ' m'], ['CONTROL', ctrl / 100, ctrl]],
+      rocket: [['DAMAGE', st.dmg / 1100, st.dmg], ['BLAST', st.blast / 8, st.blast + ' m'], ['ROCKETS', st.mag / 6, st.mag],
+        ['RELOAD', (10 - st.reload) / 8, st.reload.toFixed(1) + 's'], ['ZOOM', st.zoom / 4, st.zoom + '×']],
+    }[st.cls];
+    return rows.map(r => bar(...r)).join('');
+  }
+
   renderArmory() {
     for (const t of document.querySelectorAll('[data-shop]')) t.classList.toggle('on', t.dataset.shop === this.shopTab);
+    const cls = this.shopCls;
+    const ctabs = $('clsTabs');
+    ctabs.innerHTML = '';
+    for (const c of CLASSES) {
+      const b = document.createElement('button');
+      b.className = 'tab cls' + (c.key === cls ? ' on' : '');
+      b.innerHTML = `${WICON[c.key]}${{ sniper: 'Sniper', auto: 'Auto', pistol: 'Pistol', rocket: 'Rocket' }[c.key]}`;
+      b.addEventListener('click', () => {
+        this.audio.ui();
+        this.shopCls = c.key;
+        this.shopRifle = save.loadout[c.key] || WEAPONS.find(w => w.cls === c.key).id;
+        this.shopTab = 'rifle';
+        this.renderArmory();
+      });
+      ctabs.appendChild(b);
+    }
     const id = this.shopRifle;
-    const R = RIFLES.find(r => r.id === id);
+    const R = weaponById(id);
     const owned = !!save.owned[id];
-    const st = rifleStats(id, owned ? upgOf(id) : {});
-    if (this.g.gun.def?.id !== id || this.g.gun.def?.look !== R.look) this.g.gun.setRifle(st);
+    const st = weaponStats(id, owned ? upgOf(id) : {});
+    if (this.g.gun.def?.id !== id) this.g.gun.setWeapon(st);
     $('rfName').textContent = R.name;
     $('rfDesc').textContent = R.desc;
     const list = $('rfList');
     list.innerHTML = '';
-    for (const r of RIFLES) {
+    for (const r of WEAPONS.filter(w => w.cls === cls)) {
       const b = document.createElement('button');
-      const eq = r.id === save.equipped, ow = !!save.owned[r.id];
+      const eq = save.loadout[cls] === r.id && !!save.owned[r.id], ow = !!save.owned[r.id];
       b.className = 'rf' + (r.id === id ? ' on' : '') + (ow ? ' owned' : '') + (eq ? ' eq' : '');
       b.innerHTML = `<i></i>${r.name}`;
       b.addEventListener('click', () => { this.audio.ui(); this.shopRifle = r.id; this.renderArmory(); });
@@ -330,28 +386,22 @@ export class UI {
     }
     const body = $('shopBody');
     if (this.shopTab === 'rifle') {
-      const bar = (name, f, v) => `<div class="stat"><span>${name}</span><span class="t"><i style="width:${Math.round(clamp(f, 0.04, 1) * 100)}%"></i></span><span class="v">${v}</span></div>`;
-      let html = '';
-      html += bar('DAMAGE', st.dmg / 420, st.dmg);
-      html += bar('ZOOM', st.zoom / 12, st.zoom + '×');
-      html += bar('FIRE RATE', (1 / st.bolt) / 3.2, Math.round(60 / st.bolt) + '/m');
-      html += bar('MAGAZINE', st.mag / 16, st.mag);
-      html += bar('RELOAD', (3.4 - st.reload) / 2.2, st.reload.toFixed(1) + 's');
-      html += bar('STABILITY', (1.4 - st.sway) / 1.1, Math.round((1.4 - st.sway) / 1.1 * 100));
-      html += bar('PIERCE', st.pen / 3, st.pen);
+      const C = CLASSES.find(c => c.key === cls);
+      let html = `<p class="kv" style="margin:0 0 6px">${C.blurb}</p>` + this.statBars(st);
       if (!owned) {
         html += `<div class="row" style="margin-top:10px"><span class="kv">Price <b>${fmt(R.price)}</b></span><button class="btn primary" id="buyRifle" ${save.cash >= R.price ? '' : 'disabled'}>Buy</button></div>`;
         if (save.cash < R.price) html += `<p class="kv" style="margin:6px 0 0">You need ${fmt(R.price - save.cash)} more. Replay missions or try Survival to earn cash.</p>`;
       } else {
-        const eq = save.equipped === id;
-        html += `<div class="row" style="margin-top:10px"><span class="kv">${eq ? 'Equipped' : 'Owned'}</span><button class="btn ${eq ? '' : 'primary'}" id="equipRifle" ${eq ? 'disabled' : ''}>${eq ? 'Equipped' : 'Equip'}</button></div>`;
+        const eq = save.loadout[cls] === id;
+        html += `<div class="row" style="margin-top:10px"><span class="kv">${eq ? `Your ${C.one.toLowerCase()} for missions` : 'Owned'}</span><button class="btn ${eq ? '' : 'primary'}" id="equipRifle" ${eq ? 'disabled' : ''}>${eq ? 'Equipped' : 'Equip'}</button></div>`;
         html += `<div class="sectionT">UPGRADES</div>`;
         const u = upgOf(id);
         for (const U of UPGRADES) {
+          const info = upgradeInfo(cls, U.key);
           const lvl = u[U.key] || 0;
           const cost = upgradeCost(id, U.key, lvl);
-          const pips = Array.from({ length: U.max }, (_, i) => `<i class="${i < lvl ? 'f' : ''}"></i>`).join('');
-          html += `<div class="up"><div><div class="nm">${U.name}</div><div class="ds">${U.info}</div><div class="pips">${pips}</div></div>
+          const pips = Array.from({ length: info.max }, (_, i) => `<i class="${i < lvl ? 'f' : ''}"></i>`).join('');
+          html += `<div class="up"><div><div class="nm">${info.name}</div><div class="ds">${info.info}</div><div class="pips">${pips}</div></div>
             ${cost === null ? '<span class="kv"><b>MAX</b></span>' : `<button class="btn ${save.cash >= cost ? 'primary' : ''}" data-up="${U.key}" ${save.cash >= cost ? '' : 'disabled'}>${fmt(cost)}</button>`}</div>`;
         }
       }
@@ -361,15 +411,13 @@ export class UI {
         save.cash -= R.price; save.owned[id] = true; upgOf(id);
         this.g.equip(id); persist(); this.audio.buy(); this.updateCash(); this.renderArmory();
       });
-      $('equipRifle')?.addEventListener('click', () => { this.g.equip(id); persist(); this.audio.ui(); this.renderArmory(); });
+      $('equipRifle')?.addEventListener('click', () => { this.g.equip(id); this.audio.ui(); this.renderArmory(); });
       for (const b of body.querySelectorAll('[data-up]')) {
         b.addEventListener('click', () => {
           const key = b.dataset.up, u = upgOf(id), cost = upgradeCost(id, key, u[key] || 0);
           if (cost === null || save.cash < cost) return;
           save.cash -= cost; u[key] = (u[key] || 0) + 1;
-          if (save.equipped === id) this.g.equip(id);
-          this.g.gun.def = null;
-          persist(); this.audio.buy(); this.updateCash(); this.renderArmory();
+          persist(); this.g.refreshLoadout(); this.audio.buy(); this.updateCash(); this.renderArmory();
         });
       }
     } else {
@@ -459,7 +507,7 @@ export class UI {
     d.textContent = text;
     if (kind) d.className = kind;
     f.appendChild(d);
-    while (f.children.length > 5) f.firstChild.remove();
+    while (f.children.length > 3) f.firstChild.remove();
     setTimeout(() => d.remove(), 2700);
   }
   bigText(text, kind) {
@@ -503,10 +551,15 @@ export class UI {
     $('kcBars').hidden = !on;
     if (on) { this.scopeCv.hidden = true; } else if (this.g.scopeShown) this.scopeCv.hidden = false;
   }
+  // Snipers look through the scope overlay; every other class aims down a red-dot sight.
   setScoped(on) {
-    document.body.classList.toggle('scoped', on);
-    this.scopeCv.hidden = !on;
-    $('zoomBox').hidden = !on;
+    const sniper = !this.g || this.g.rifle.cls === 'sniper';
+    const scope = on && sniper, sight = on && !sniper;
+    document.body.classList.toggle('scoped', scope);
+    document.body.classList.toggle('sighted', sight);
+    document.body.classList.toggle('rsight', sight && this.g.rifle.cls === 'rocket');
+    this.scopeCv.hidden = !scope;
+    $('zoomBox').hidden = !scope;
   }
 
   // ---------------------------------------------------------- layout
@@ -539,7 +592,7 @@ export class UI {
       if (this.keys.has('ArrowUp') || this.keys.has('w')) g.look(0, -s);
       if (this.keys.has('ArrowDown') || this.keys.has('s')) g.look(0, s);
     }
-    if (this.fireHeld && g.rifle.semi) g.fire();
+    if (this.fireHeld && (g.rifle.semi || g.rifle.auto)) g.fire();
     const c = this.cache;
     const set = (id, v, prop = 'textContent') => { if (c[id] !== v) { c[id] = v; $(id)[prop] = v; } };
     set('cash', fmt(g.stats.earned));
@@ -556,15 +609,19 @@ export class UI {
     }
     set('objective', this.objectiveText());
     const r = g.rifle;
-    const ammoKey = g.ammo + '/' + r.mag;
+    const ammoKey = r.id + ':' + g.ammo + '/' + r.mag;
     if (c.ammo !== ammoKey) {
       c.ammo = ammoKey;
       $('ammoNum').innerHTML = `${g.ammo}<small>/${r.mag}</small>`;
-      $('rounds').innerHTML = Array.from({ length: r.mag }, (_, i) => `<i class="${i < g.ammo ? '' : 'x'}"></i>`).join('');
+      $('rounds').innerHTML = r.mag <= 12
+        ? Array.from({ length: r.mag }, (_, i) => `<i class="${i < g.ammo ? '' : 'x'}"></i>`).join('')
+        : `<span class="abar"><b style="width:${Math.round(g.ammo / r.mag * 100)}%"></b></span>`;
     }
     const reloading = g.reloading > 0;
-    if (c.rel !== reloading) { c.rel = reloading; $('reloadHint').hidden = !reloading; $('btnReload').classList.toggle('busy', reloading); }
-    const p = reloading ? 1 - g.reloading / r.reload : g.chamber > 0 ? 1 - g.chamber / r.bolt : 1;
+    const hint = reloading ? (r.cls === 'rocket' ? 'LOADING ROCKET' : 'RELOADING') : r.name.toUpperCase();
+    if (c.hint !== hint) { c.hint = hint; const h = $('reloadHint'); h.textContent = hint; h.classList.toggle('busy', reloading); }
+    if (c.rel !== reloading) { c.rel = reloading; $('btnReload').classList.toggle('busy', reloading); }
+    const p = g.switchT > 0 ? 1 - g.switchT / r.swap : reloading ? 1 - g.reloading / r.reload : g.chamber > 0 ? 1 - g.chamber / r.bolt : 1;
     const pr = Math.round(p * 50) / 50;
     if (c.p !== pr) { c.p = pr; $('btnFire').style.setProperty('--p', pr); }
     for (const b of document.querySelectorAll('.item')) {
@@ -575,7 +632,10 @@ export class UI {
       if (c[key] !== v) { c[key] = v; b.querySelector('.cnt').textContent = n; b.classList.toggle('empty', n <= 0); b.classList.toggle('active', act); }
     }
     if (c.scoped !== g.scoped) { c.scoped = g.scoped; $('btnScope').classList.toggle('on', g.scoped); }
-    if (g.scopeShown) {
+    this.updateWeaponBar();
+    const gap = Math.round(6 + g.spreadPx());
+    if (c.gap !== gap) { c.gap = gap; $('cross').style.setProperty('--g', gap + 'px'); }
+    if (g.scopeShown && r.cls === 'sniper') {
       const zl = g.zoomLevel();
       const zk = Math.round(g.zoomT * 100);
       if (c.zk !== zk) { c.zk = zk; const th = $('zoomTrack').clientHeight || 150; $('zoomKnob').style.top = `${(1 - g.zoomT) * (th - 37) + 2}px`; }
@@ -584,6 +644,26 @@ export class UI {
       this.drawScope(zl);
     }
     if (this.frameN % 2 === 0) this.drawRadar();
+  }
+
+  updateWeaponBar() {
+    const g = this.g, c = this.cache, bar = $('wbar');
+    const key = Object.values(g.slots).map(sl => sl.w.id).join();
+    if (c.wbar !== key) {
+      c.wbar = key;
+      bar.innerHTML = Object.keys(g.slots).map(k => `<button class="wslot" data-cls="${k}" aria-label="${CLASSES.find(x => x.key === k).one}">${WICON[k]}<i class="rl"><b></b></i></button>`).join('');
+      c.wslots = {};
+    }
+    for (const b of bar.children) {
+      const sl = g.slots[b.dataset.cls];
+      const st = (b.dataset.cls === g.cls ? 'on' : '') + (sl.reloading > 0 ? 'r' + Math.round((1 - sl.reloading / sl.w.reload) * 20) : sl.ammo === 0 ? 'e' : '');
+      if (c.wslots[b.dataset.cls] === st) continue;
+      c.wslots[b.dataset.cls] = st;
+      b.classList.toggle('on', b.dataset.cls === g.cls);
+      b.classList.toggle('empty', sl.ammo === 0 && sl.reloading <= 0);
+      b.classList.toggle('loading', sl.reloading > 0);
+      b.querySelector('.rl b').style.width = sl.reloading > 0 ? Math.round((1 - sl.reloading / sl.w.reload) * 100) + '%' : '0';
+    }
   }
 
   objectiveText() {

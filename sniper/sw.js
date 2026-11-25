@@ -1,5 +1,5 @@
 // Offline cache: every file the game needs is stored on first visit, then served from the cache.
-const CACHE = 'deadeye-outpost-v2';
+const CACHE = 'deadeye-outpost-v3';
 const ASSETS = [
   './',
   './index.html',

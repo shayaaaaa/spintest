@@ -8,9 +8,9 @@ function defaults() {
     cash: 300,
     unlocked: 0,                 // highest campaign mission index that can be played
     stars: [],                   // stars[i] = best stars for mission i
-    owned: { ranger: true },
+    owned: { ranger: true, service: true },
     upg: { ranger: { dmg: 0, mag: 0, rel: 0, stb: 0 } },
-    equipped: 'ranger',
+    loadout: { sniper: 'ranger', auto: null, pistol: 'service', rocket: null },
     items: { focus: 1, strike: 1, repair: 1 },
     wall: 0,
     best: { farm: 0, town: 0, yard: 0 },
@@ -37,7 +37,15 @@ function load() {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const s = JSON.parse(raw);
-      if (s && s.v === 1) return merge(defaults(), s);
+      if (s && s.v === 1) {
+        const m = merge(defaults(), s);
+        // saves from before weapon classes had a single equipped rifle
+        if (!s.loadout && s.equipped) m.loadout.sniper = s.equipped;
+        delete m.equipped;
+        m.owned.service = true;
+        if (!m.loadout.pistol) m.loadout.pistol = 'service';
+        return m;
+      }
     }
   } catch (e) { /* storage unavailable */ }
   return defaults();

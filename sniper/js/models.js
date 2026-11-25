@@ -259,13 +259,160 @@ export function buildRifle(def) {
   }
   // gloves
   const glove = lam(0x2b2a28), sleeve = lam(0x4a5236);
-  box(g, 0.075, 0.08, 0.09, 0.015, -0.1, 0.13, glove);
-  box(g, 0.09, 0.09, 0.25, 0.04, -0.14, 0.3, sleeve);
-  box(g, 0.08, 0.06, 0.1, -0.02, -0.07, -0.32 * len, glove);
-  box(g, 0.1, 0.09, 0.3, -0.09, -0.1, -0.16 * len, sleeve);
+  const hands = handsOf(g);
+  box(hands, 0.075, 0.08, 0.09, 0.015, -0.1, 0.13, glove);
+  box(hands, 0.09, 0.09, 0.25, 0.04, -0.14, 0.3, sleeve);
+  box(hands, 0.08, 0.06, 0.1, -0.02, -0.07, -0.32 * len, glove);
+  box(hands, 0.1, 0.09, 0.3, -0.09, -0.1, -0.16 * len, sleeve);
 
   const muzzle = new THREE.Object3D();
   muzzle.position.set(0, 0.012, tipZ - 0.06);
   g.add(muzzle);
   return { group: g, muzzle };
+}
+
+// ---------------------------------------------------------------- other weapon classes (barrels point toward -z)
+function cyl(parent, r, len, x, y, z, material, axis = 'z') {
+  const m = new THREE.Mesh(CYL, material);
+  m.scale.set(r, len, r);
+  if (axis === 'z') m.rotation.x = Math.PI / 2;
+  else if (axis === 'x') m.rotation.z = Math.PI / 2;
+  m.position.set(x, y, z);
+  parent.add(m);
+  return m;
+}
+function handsOf(g) {
+  if (!g.userData.hands) { const h = new THREE.Group(); g.add(h); g.userData.hands = h; }
+  return g.userData.hands;
+}
+function gloves(gun, rightZ, leftZ, leftX = -0.02, leftY = -0.065) {
+  const glove = lam(0x2b2a28), sleeve = lam(0x4a5236);
+  const g = handsOf(gun);
+  box(g, 0.07, 0.08, 0.09, 0.012, -0.1, rightZ, glove);
+  box(g, 0.09, 0.09, 0.25, 0.04, -0.14, rightZ + 0.17, sleeve);
+  box(g, 0.08, 0.06, 0.1, leftX, leftY, leftZ, glove);
+  const ls = box(g, 0.1, 0.09, 0.3, leftX - 0.07, leftY - 0.035, leftZ + 0.17, sleeve);
+  ls.rotation.y = 0.25;
+}
+
+export function buildAuto(def) {
+  const L = def.look, g = new THREE.Group(), len = L.len;
+  const bodyM = lam(L.body), furnM = lam(L.furn), metalM = lam(0x3a3e42), dark = lam(0x18191b);
+  box(g, 0.06, 0.1, 0.26, 0, -0.03, 0.34, furnM);                 // stock
+  box(g, 0.07, 0.12, 0.03, 0, -0.04, 0.47, dark);                  // butt pad
+  box(g, 0.05, 0.11, 0.06, 0, -0.1, 0.14, furnM).rotation.x = 0.25; // grip
+  box(g, 0.075, 0.1, 0.4, 0, 0, 0, bodyM);                         // receiver
+  box(g, 0.022, 0.012, 0.36, 0, 0.056, -0.02, metalM);             // top rail
+  box(g, 0.085, 0.09, 0.3 * len, 0, -0.005, -0.2 - 0.15 * len, furnM); // handguard
+  const bl = 0.32 * len;
+  cyl(g, 0.014, bl, 0, 0.005, -0.2 - 0.3 * len - bl / 2 + 0.02, metalM);
+  const tipZ = -0.2 - 0.3 * len - bl + 0.02;
+  box(g, 0.034, 0.034, 0.07, 0, 0.005, tipZ - 0.02, dark);         // flash hider
+  if (L.mag === 'curved') { const m = box(g, 0.05, 0.16, 0.07, 0, -0.12, -0.09, dark); m.rotation.x = 0.32; }
+  else if (L.mag === 'box') box(g, 0.05, 0.13, 0.08, 0, -0.11, -0.08, dark);
+  else if (L.mag === 'drum') { const d = cyl(g, 0.085, 0.07, 0, -0.13, -0.05, dark, 'x'); d.rotation.set(0, 0, Math.PI / 2); }
+  // reflex sight
+  box(g, 0.05, 0.014, 0.08, 0, 0.068, -0.02, dark);
+  box(g, 0.012, 0.05, 0.07, -0.022, 0.1, -0.02, dark);
+  box(g, 0.012, 0.05, 0.07, 0.022, 0.1, -0.02, dark);
+  box(g, 0.056, 0.012, 0.07, 0, 0.126, -0.02, dark);
+  const lensM = bas(0x5a2a22); const lens = box(g, 0.034, 0.036, 0.004, 0, 0.1, -0.05, lensM);
+  lens.material = lensM;
+  if (L.bipod) {
+    box(g, 0.012, 0.012, 0.22, 0.03, -0.06, -0.48 * len, metalM);
+    box(g, 0.012, 0.012, 0.22, -0.03, -0.06, -0.48 * len, metalM);
+  }
+  gloves(g, 0.13, -0.28 * len);
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.005, tipZ - 0.08); g.add(muzzle);
+  return { group: g, muzzle };
+}
+
+export function buildPistol(def) {
+  const L = def.look, g = new THREE.Group();
+  const bodyM = lam(L.body), gripM = lam(L.grip), dark = lam(0x18191b);
+  let tip;
+  if (L.revolver) {
+    box(g, 0.036, 0.04, 0.2, 0, 0.035, -0.15, bodyM);        // barrel
+    box(g, 0.012, 0.014, 0.014, 0, 0.062, -0.24, bodyM);      // front sight
+    cyl(g, 0.034, 0.075, 0, 0.025, -0.02, bodyM);             // cylinder
+    box(g, 0.04, 0.06, 0.1, 0, 0.03, 0.04, bodyM);            // frame
+    box(g, 0.012, 0.025, 0.02, 0, 0.065, 0.085, dark);        // hammer
+    tip = -0.26;
+  } else {
+    box(g, 0.042, 0.042, 0.2, 0, 0.032, -0.06, bodyM);       // slide
+    box(g, 0.04, 0.03, 0.17, 0, 0.0, -0.05, dark);           // frame
+    box(g, 0.01, 0.012, 0.008, 0, 0.058, -0.15, dark);        // front sight
+    box(g, 0.03, 0.012, 0.008, 0, 0.058, 0.03, dark);         // rear sight
+    if (L.long) { box(g, 0.036, 0.036, 0.05, 0, 0.032, -0.18, dark); }
+    tip = L.long ? -0.21 : -0.17;
+  }
+  box(g, 0.012, 0.035, 0.05, 0, -0.03, -0.01, dark);          // trigger guard
+  box(g, 0.04, 0.11, 0.055, 0, -0.06, 0.04, gripM).rotation.x = 0.25;
+  if (L.long) box(g, 0.034, 0.12, 0.045, 0, -0.16, 0.065, dark).rotation.x = 0.25;
+  const glove = lam(0x2b2a28), sleeve = lam(0x4a5236);
+  const hands = handsOf(g);
+  box(hands, 0.058, 0.085, 0.08, 0.012, -0.065, 0.05, glove);
+  box(hands, 0.05, 0.075, 0.075, -0.028, -0.07, 0.045, glove);
+  box(hands, 0.08, 0.08, 0.24, 0.03, -0.11, 0.21, sleeve);
+  box(hands, 0.08, 0.08, 0.24, -0.07, -0.11, 0.2, sleeve).rotation.y = 0.35;
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0.032, tip - 0.03); g.add(muzzle);
+  return { group: g, muzzle };
+}
+
+export function buildLauncher(def) {
+  const L = def.look, g = new THREE.Group();
+  const tubeM = lam(L.body), rim = lam(new THREE.Color(L.body).multiplyScalar(0.7).getHex()), dark = lam(0x1a1b1c);
+  const headM = lam(0x6a7a40), tipM = lam(0x3a3a2a);
+  const n = L.tubes, r = n === 1 ? 0.058 : 0.046;
+  const spots = n === 1 ? [[0, 0]] : [[-0.048, -0.01], [0.048, -0.01], [0, 0.072]];
+  const warheads = [];
+  for (const [tx, ty] of spots) {
+    cyl(g, r, 1.0, tx, ty, -0.1, tubeM);
+    cyl(g, r * 1.18, 0.06, tx, ty, -0.6, rim);
+    cyl(g, r * 1.3, 0.1, tx, ty, 0.42, rim);
+    const w = new THREE.Group();
+    const cone = new THREE.Mesh(CONE4, headM); cone.scale.set(r * 0.95, 0.2, r * 0.95); cone.rotation.x = -Math.PI / 2; cone.position.z = -0.1;
+    const neck = new THREE.Mesh(CYL, tipM); neck.scale.set(r * 0.5, 0.08, r * 0.5); neck.rotation.x = Math.PI / 2;
+    w.add(cone, neck);
+    w.position.set(tx, ty, -0.63);
+    g.add(w);
+    warheads.push(w);
+  }
+  box(g, 0.045, 0.12, 0.055, 0, -0.12, 0.06, dark).rotation.x = 0.2;   // trigger grip
+  box(g, 0.045, 0.1, 0.05, 0, -0.11, -0.25, dark);                       // fore grip
+  box(g, 0.055, 0.065, 0.11, -0.1, 0.05, -0.05, dark);                   // optical sight
+  box(g, 0.04, 0.04, 0.005, -0.1, 0.05, -0.108, bas(0x3a6a7a));
+  const glove = lam(0x2b2a28), sleeve = lam(0x4a5236);
+  const hands = handsOf(g);
+  box(hands, 0.07, 0.09, 0.08, 0.012, -0.12, 0.07, glove);
+  box(hands, 0.09, 0.09, 0.25, 0.04, -0.16, 0.24, sleeve);
+  box(hands, 0.08, 0.07, 0.09, -0.015, -0.1, -0.25, glove);
+  box(hands, 0.1, 0.09, 0.3, -0.08, -0.13, -0.08, sleeve).rotation.y = 0.25;
+  const muzzle = new THREE.Object3D(); muzzle.position.set(0, 0, -0.72); g.add(muzzle);
+  g.userData.warheads = warheads;
+  return { group: g, muzzle };
+}
+
+export function buildWeapon(def) {
+  if (def.cls === 'auto') return buildAuto(def);
+  if (def.cls === 'pistol') return buildPistol(def);
+  if (def.cls === 'rocket') return buildLauncher(def);
+  return buildRifle(def);
+}
+
+// Rocket in flight; its nose points toward +z so it can be aimed with lookAt.
+export function buildRocketProjectile() {
+  const g = new THREE.Group();
+  const body = new THREE.Mesh(CYL, lam(0x5a6a3a)); body.scale.set(0.045, 0.5, 0.045); body.rotation.x = Math.PI / 2;
+  const nose = new THREE.Mesh(CONE4, lam(0x6a7a40)); nose.scale.set(0.06, 0.2, 0.06); nose.rotation.x = Math.PI / 2; nose.position.z = 0.34;
+  g.add(body, nose);
+  for (let i = 0; i < 4; i++) {
+    const f = new THREE.Mesh(BOX, lam(0x3a3a2a)); f.scale.set(0.006, 0.12, 0.1);
+    f.position.z = -0.2; f.rotation.z = i * Math.PI / 2; f.translateY(0.06);
+    g.add(f);
+  }
+  const flame = new THREE.Mesh(CONE4, new THREE.MeshBasicMaterial({ color: 0xffb040, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+  flame.scale.set(0.06, 0.4, 0.06); flame.rotation.x = -Math.PI / 2; flame.position.z = -0.45; flame.name = 'flame';
+  g.add(flame);
+  return g;
 }

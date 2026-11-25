@@ -109,6 +109,27 @@ export class Sound {
     this._tone(70, 0.5, { f1: 30, gain: 0.5, type: 'triangle' });
   }
 
+  auto(heavy = false) {
+    if (!this.ok) return;
+    this._noise(heavy ? 0.22 : 0.15, { type: 'lowpass', f0: 4200, f1: 450, q: 0.7, gain: heavy ? 0.55 : 0.42 });
+    this._noise(0.035, { type: 'highpass', f0: 3000, gain: 0.22 });
+    this._tone(heavy ? 115 : 150, 0.08, { f1: 55, gain: heavy ? 0.4 : 0.28 });
+  }
+
+  pistol(heavy = false) {
+    if (!this.ok) return;
+    this._noise(heavy ? 0.4 : 0.18, { type: 'lowpass', f0: heavy ? 4200 : 5200, f1: 380, q: 0.7, gain: heavy ? 0.75 : 0.5, echo: heavy });
+    this._noise(0.045, { type: 'highpass', f0: 2800, gain: 0.32 });
+    this._tone(heavy ? 120 : 185, 0.12, { f1: 60, gain: heavy ? 0.5 : 0.3 });
+  }
+
+  rocket() {
+    if (!this.ok) return;
+    this._noise(0.28, { type: 'lowpass', f0: 3200, f1: 300, q: 0.7, gain: 0.7 });
+    this._tone(95, 0.45, { f1: 38, gain: 0.6 });
+    this._noise(1.1, { type: 'bandpass', f0: 500, f1: 2200, q: 0.9, gain: 0.4, attack: 0.05 });
+  }
+
   click(delay = 0, f = 2600, gain = 0.25) {
     if (!this.ok) return;
     this._noise(0.05, { type: 'bandpass', f0: f, q: 6, gain, delay });

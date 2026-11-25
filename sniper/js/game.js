@@ -1,9 +1,9 @@
 // Core gameplay: camera, rifle handling, enemies, survivors, missions and the kill cam.
 import * as THREE from './three.module.min.js';
-import { BASE_FOV, EYE, WALL_Z, WALL_HALF, ZOMBIES, MAPS, LEVELS, WALL_LEVELS, RIFLES, rifleStats, survivalWave } from './data.js';
+import { BASE_FOV, EYE, WALL_Z, WALL_HALF, ZOMBIES, MAPS, LEVELS, WALL_LEVELS, RIFLES, CLASSES, weaponStats, weaponById, survivalWave } from './data.js';
 import { save, persist, upgOf } from './save.js';
 import { buildWorld } from './world.js';
-import { buildHumanoid, zombieLook, survivorLook, buildRifle, CYL, bas, disposeOwned } from './models.js';
+import { buildHumanoid, zombieLook, survivorLook, buildWeapon, buildRocketProjectile, CYL, bas, disposeOwned } from './models.js';
 import { FX } from './fx.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
@@ -54,9 +54,9 @@ class Zombie {
   hitMeshes() { return this.m.hit.filter(h => h.userData.part !== 'helmet' || this.helmet); }
   headWorld(out = new THREE.Vector3()) { return this.m.head.getWorldPosition(out); }
 
-  computeDamage(part, base) {
+  computeDamage(part, base, hs = 1) {
     if (part === 'helmet' && this.helmet) return { dmg: base * 0.2, helmet: true, headshot: false };
-    if (part === 'head') return { dmg: base * this.def.headMult, headshot: true };
+    if (part === 'head') return { dmg: base * this.def.headMult * hs, headshot: true };
     if (part === 'limb') return { dmg: base * 0.7, headshot: false };
     return { dmg: base, headshot: false };
   }
@@ -383,65 +383,89 @@ function flashTexture() {
   return t;
 }
 
+// Where each weapon class sits in front of the camera: hip position, aimed position, scale,
+// and an extra scale for the armory showcase.
+const POSE = {
+  sniper: { rest: [0.19, -0.185, -0.5], ads: [0, -0.075, -0.3], scale: 0.66, show: 1 },
+  auto: { rest: [0.17, -0.17, -0.46], ads: [0, -0.112, -0.36], scale: 0.62, show: 1.15 },
+  pistol: { rest: [0.14, -0.14, -0.4], ads: [0, -0.098, -0.38], scale: 0.78, show: 1.9 },
+  rocket: { rest: [0.2, -0.15, -0.52], ads: [0.068, -0.085, -0.34], scale: 0.5, show: 0.95 },
+};
+
 class ViewModel {
   constructor(camera) {
     this.holder = new THREE.Group();
     camera.add(this.holder);
-    this.rest = new THREE.Vector3(0.19, -0.185, -0.5);
-    this.ads = new THREE.Vector3(0.0, -0.075, -0.3);
     this.kick = 0; this.adsK = 0; this.reloadK = 0; this.boltK = 0; this.t = 0;
+    this.raiseK = 0; this.raiseRate = 4;
     this.showcase = false; this.showT = 0;
+    this.models = new Map();
     const tex = flashTexture();
     this.flashMat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false });
     this.flashT = 0;
+    this._rest = new THREE.Vector3(); this._ads = new THREE.Vector3();
   }
-  setRifle(def) {
-    if (this.gun) this.holder.remove(this.gun);
-    const { group, muzzle } = buildRifle(def);
-    this.gun = group; this.muzzle = muzzle; this.def = def;
-    this.holder.add(group);
-    const f = new THREE.Group();
-    const a = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), this.flashMat);
-    const b = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.5), this.flashMat);
-    b.rotation.y = Math.PI / 2; b.position.z = -0.18; b.rotation.z = Math.PI / 2;
-    const c = b.clone(); c.rotation.x = Math.PI / 2;
-    f.add(a, b, c);
-    f.visible = false;
-    muzzle.add(f);
-    this.flash = f;
+  setWeapon(def) {
+    let m = this.models.get(def.id);
+    if (!m) {
+      const { group, muzzle } = buildWeapon(def);
+      const f = new THREE.Group();
+      const a = new THREE.Mesh(new THREE.PlaneGeometry(0.34, 0.34), this.flashMat);
+      const b = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.5), this.flashMat);
+      b.rotation.y = Math.PI / 2; b.position.z = -0.18; b.rotation.z = Math.PI / 2;
+      const c = b.clone(); c.rotation.x = Math.PI / 2;
+      f.add(a, b, c);
+      f.scale.setScalar(def.cls === 'rocket' ? 1.8 : def.cls === 'pistol' ? 0.7 : def.cls === 'auto' ? 0.8 : 1);
+      f.visible = false;
+      muzzle.add(f);
+      m = { group, muzzle, flash: f };
+      this.holder.add(group);
+      this.models.set(def.id, m);
+    }
+    for (const v of this.models.values()) v.group.visible = v === m;
+    if (this.flash && this.flash !== m.flash) this.flash.visible = false;
+    this.gun = m.group; this.muzzle = m.muzzle; this.flash = m.flash; this.def = def;
   }
-  fire() { this.kick = 1; this.flashT = 0.05; this.flash.visible = true; this.flash.rotation.z = Math.random() * 6; }
+  raise(time) { this.raiseK = 1; this.raiseRate = 1 / Math.max(0.1, time); }
+  fire(strength = 1) { this.kick = Math.min(1, Math.max(this.kick, strength)); this.flashT = 0.05; this.flash.visible = true; this.flash.rotation.z = Math.random() * 6; }
   update(dt, g) {
     this.t += dt;
     this.kick = Math.max(0, this.kick - dt * 5.5);
+    this.raiseK = Math.max(0, this.raiseK - dt * this.raiseRate);
     const wantAds = g.scoped ? 1 : 0;
     this.adsK += (wantAds - this.adsK) * Math.min(1, dt * 18);
     const r = g.rifle;
     const rel = g.reloading > 0 ? Math.sin(Math.min(1, 1 - g.reloading / r.reload) * Math.PI) : 0;
     this.reloadK += (rel - this.reloadK) * Math.min(1, dt * 12);
-    const bolt = !r.semi && g.chamber > 0 && g.reloading <= 0 ? Math.sin(clamp(1 - g.chamber / r.bolt, 0, 1) * Math.PI) : 0;
+    const bolt = r.cls === 'sniper' && !r.semi && g.chamber > 0 && g.reloading <= 0 ? Math.sin(clamp(1 - g.chamber / r.bolt, 0, 1) * Math.PI) : 0;
     this.boltK += (bolt - this.boltK) * Math.min(1, dt * 20);
     if (this.flashT > 0) { this.flashT -= dt; if (this.flashT <= 0) this.flash.visible = false; }
     const gun = this.gun;
+    const P = POSE[this.def.cls] || POSE.sniper;
     if (this.showcase) {
       this.showT += dt;
       this.holder.visible = true;
-      // park the rifle in the empty left half of the armory screen, side-on
+      // park the weapon in the empty left half of the armory screen, side-on
       const cam = g.camera, d = 1.7;
       const halfH = d * Math.tan(cam.fov * Math.PI / 360), halfW = halfH * cam.aspect;
       const portrait = cam.aspect < 1;
-      gun.position.set(portrait ? 0.1 : -halfW * 0.5 + 0.2, portrait ? halfH * 0.42 : halfH * 0.3, -d);
+      gun.position.set(portrait ? 0.1 : -halfW * 0.5 + 0.2, portrait ? halfH * 0.42 : halfH * 0.06, -d);
       gun.rotation.set(0.06, Math.PI / 2 + Math.sin(this.showT * 0.5) * 0.3, 0.04);
-      gun.scale.setScalar(portrait ? 0.8 : Math.min(1.05, halfW * 0.62));
+      gun.scale.setScalar((portrait ? 0.8 : Math.min(1.05, halfW * 0.62)) * P.show);
+      if (gun.userData.warheads) for (const w of gun.userData.warheads) w.visible = true;
+      if (gun.userData.hands) gun.userData.hands.visible = false;
       return;
     }
-    gun.scale.setScalar(0.66);
+    if (gun.userData.hands) gun.userData.hands.visible = true;
+    gun.scale.setScalar(P.scale);
     const bob = Math.sin(this.t * 1.6) * 0.004;
-    gun.position.copy(this.rest).lerp(this.ads, this.adsK);
-    gun.position.y += bob - this.reloadK * 0.16 - this.boltK * 0.02;
-    gun.position.z += this.kick * 0.07;
-    gun.rotation.set(this.kick * 0.16 - this.reloadK * 0.5, 0.04 * (1 - this.adsK), this.reloadK * 0.5 + this.boltK * 0.25);
+    gun.position.copy(this._rest.fromArray(P.rest)).lerp(this._ads.fromArray(P.ads), this.adsK);
+    gun.position.y += bob - this.reloadK * 0.16 - this.boltK * 0.02 - this.raiseK * 0.3;
+    const kf = r.cls === 'auto' ? 0.45 : 1;
+    gun.position.z += this.kick * 0.07 * kf;
+    gun.rotation.set(this.kick * 0.16 * kf - this.reloadK * 0.5 - this.raiseK * 0.8, 0.04 * (1 - this.adsK), this.reloadK * 0.5 + this.boltK * 0.25);
     if (gun.userData.bolt) gun.userData.bolt.position.z = 0.1 + this.boltK * 0.08;
+    if (gun.userData.warheads) gun.userData.warheads.forEach((w, i) => { w.visible = i < g.ammo; });
     this.holder.visible = (g.state === 'playing' || g.state === 'over' || g.state === 'paused') && !g.scopeShown;
   }
 }
@@ -467,7 +491,10 @@ export class Game {
     this.state = 'menu';
     this.mode = null;
     this.yaw = 0; this.pitch = -0.1;
-    this.chamber = 0; this.reloading = 0; this.ammo = 0;
+    this.slots = {};
+    this.cls = 'sniper';
+    this.cur = { cls: 'sniper', w: weaponStats('ranger'), ammo: 0, reloading: 0, chamber: 0 };
+    this.switchT = 0; this.spread = 0; this.rockets = [];
     this.scoped = false; this.scopeShown = false; this.zoomT = 0.6;
     this.fov = BASE_FOV;
     this.recoil = 0; this.recoilYaw = 0; this.shake = 0;
@@ -480,10 +507,20 @@ export class Game {
     this.menuT = 0;
     this.perf = { t: 0, n: 0 };
     this.bullet = this.makeBullet();
-    this.equip(save.equipped);
+    this.rocketProto = buildRocketProjectile();
+    this.refreshLoadout();
     this.loadMap(0);
     this.resize();
   }
+
+  // The weapon in hand. Ammo, reload and chamber timers live on its loadout slot.
+  get rifle() { return this.cur.w; }
+  get ammo() { return this.cur.ammo; }
+  set ammo(v) { this.cur.ammo = v; }
+  get reloading() { return this.cur.reloading; }
+  set reloading(v) { this.cur.reloading = v; }
+  get chamber() { return this.cur.chamber; }
+  set chamber(v) { this.cur.chamber = v; }
 
   makeBullet() {
     const g = new THREE.Group();
@@ -511,11 +548,28 @@ export class Game {
     this.resize();
   }
 
+  // Put a weapon into its class slot of the loadout.
   equip(id) {
-    save.equipped = id;
-    this.rifle = rifleStats(id, upgOf(id));
-    this.gun.setRifle(this.rifle);
-    this.ammo = this.rifle.mag;
+    const w = weaponById(id);
+    save.loadout[w.cls] = id;
+    persist();
+    this.refreshLoadout();
+  }
+
+  // One slot per class the player owns a weapon for. The sniper and pistol slots are always filled.
+  refreshLoadout() {
+    this.slots = {};
+    for (const c of CLASSES) {
+      let id = save.loadout[c.key];
+      if (!id || !save.owned[id]) id = c.key === 'sniper' ? 'ranger' : c.key === 'pistol' ? 'service' : null;
+      if (!id) continue;
+      const w = weaponStats(id, upgOf(id));
+      this.slots[c.key] = { cls: c.key, w, ammo: w.mag, reloading: 0, chamber: 0 };
+    }
+    this.cls = 'sniper';
+    this.cur = this.slots.sniper;
+    this.switchT = 0; this.spread = 0;
+    this.gun.setWeapon(this.cur.w);
   }
 
   loadMap(i) {
@@ -537,6 +591,8 @@ export class Game {
     this.zombies = []; this.survivors = [];
     this.fx.clear();
     this.timers = [];
+    for (const k of this.rockets) this.scene.remove(k.mesh);
+    this.rockets = [];
   }
 
   rebuildHittables() {
@@ -593,11 +649,10 @@ export class Game {
     this.loadMap(mapIndex);
     this.clearActors();
     this.rebuildHittables();
-    this.equip(save.equipped);
+    this.refreshLoadout();
     this.wallMax = WALL_LEVELS[save.wall].hp;
     this.wallHp = this.wallMax;
     this.world.barricade.setHealth(1);
-    this.chamber = 0; this.reloading = 0;
     this.scoped = false; this.scopeShown = false;
     this.yaw = 0; this.pitch = -0.12;
     this.focusT = 0; this.audio.setFocus(false); this.ui.focus(false);
@@ -760,11 +815,19 @@ export class Game {
       const d = Math.hypot(z.pos.x - p.x, z.pos.z - p.z);
       if (d > radius) continue;
       const dir = V2.set(z.pos.x - p.x, 0.5, z.pos.z - p.z).normalize().clone();
-      const out = z.hit('body', 0, null, dir, { dmg: dmg * (1 - d / radius * 0.6), headshot: false });
+      const out = z.hit('body', o.rocket || o.mortar ? dmg : 0, null, dir, { dmg: dmg * (1 - d / radius * 0.6), headshot: false });
       if (out.killed) { kills++; this.onKill(z, false, true); }
     }
     if (!o.mortar) for (const s of this.survivors) if (s.alive && s.state !== 'climb' && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < radius * 0.7) s.kill();
     if (o.fromBloater && p.z > WALL_Z - 5) this.damageWall(120, { pos: p, def: {} });
+    if (o.rocket) {
+      // a rocket that lands next to your own wall damages it
+      const dx = Math.max(0, Math.abs(p.x) - WALL_HALF), dw = Math.hypot(dx, p.z - WALL_Z);
+      if (dw < radius) {
+        this.damageWall(dmg * 0.12 * (1 - dw / radius), { pos: p, def: {} });
+        if (this.time - (this.lastBlastWarn || 0) > 4) { this.lastBlastWarn = this.time; this.ui.feed('YOUR BLAST HIT THE WALL', 'bad'); }
+      }
+    }
     if (kills >= 2 && !o.silent) this.ui.feed(`CHAIN REACTION ×${kills}`, 'gold');
   }
 
@@ -812,7 +875,36 @@ export class Game {
   }
 
   // ------------------------------------------------------------ player actions
-  zoomLevel() { return 2 + (this.rifle.zoom - 2) * this.zoomT; }
+  zoomLevel() { const r = this.rifle; return r.cls === 'sniper' ? 2 + (r.zoom - 2) * this.zoomT : r.zoom; }
+
+  // Current bullet spread drawn as the crosshair gap, in CSS pixels.
+  spreadPx() {
+    const s = this.spread * (this.scopeShown ? 0.5 : 1);
+    return s / Math.tan(this.camera.fov * Math.PI / 360) * window.innerHeight / 2;
+  }
+
+  // Bullet damage after range falloff (automatics and pistols lose punch at distance).
+  damageAt(dist) {
+    const r = this.rifle;
+    if (!r.falloff) return r.dmg;
+    const [a, b, m] = r.falloff;
+    const t = clamp((dist - a) / (b - a), 0, 1);
+    return r.dmg * (1 - t * (1 - m));
+  }
+
+  switchWeapon(cls) {
+    if (this.state !== 'playing' || !this.slots[cls] || cls === this.cls) return;
+    if (this.scoped) this.toggleScope(false);
+    this.cls = cls;
+    this.cur = this.slots[cls];
+    this.gun.setWeapon(this.cur.w);
+    this.gun.raise(this.cur.w.swap);
+    this.switchT = this.cur.w.swap;
+    this.spread = 0;
+    this.audio.click(0, 1700, 0.22); this.audio.click(0.12, 2300, 0.18);
+    const slot = this.cur;
+    if (slot.ammo === 0 && slot.reloading <= 0) this.later(slot.w.swap, () => this.startReload(slot), true);
+  }
 
   look(dx, dy) {
     if (this.state !== 'playing') return;
@@ -832,10 +924,12 @@ export class Game {
 
   setZoom(t) { this.zoomT = clamp(t, 0, 1); }
 
-  startReload() {
-    if ((this.state !== 'playing' && this.state !== 'killcam') || this.reloading > 0 || this.ammo >= this.rifle.mag) return;
-    this.reloading = this.rifle.reload;
-    this.audio.reload(this.rifle.reload);
+  // Reloads keep running even after you switch to another weapon.
+  startReload(slot = this.cur) {
+    if (this.state !== 'playing' && this.state !== 'killcam') return;
+    if (!slot || slot.reloading > 0 || slot.ammo >= slot.w.mag) return;
+    slot.reloading = slot.w.reload;
+    if (slot === this.cur) this.audio.reload(slot.w.reload);
   }
 
   useItem(key) {
@@ -868,29 +962,39 @@ export class Game {
 
   fire() {
     if (this.state !== 'playing') return;
-    if (this.reloading > 0 || this.chamber > 0) return;
-    if (this.ammo <= 0) { this.audio.dry(); this.startReload(); return; }
-    const r = this.rifle;
-    this.ammo--;
-    this.chamber = r.bolt;
+    if (this.switchT > 0 || this.reloading > 0 || this.chamber > 0) return;
+    const slot = this.cur, r = slot.w;
+    if (slot.ammo <= 0) { this.audio.dry(); this.startReload(slot); return; }
+    slot.ammo--;
+    slot.chamber = r.bolt;
     this.stats.shots++;
-    this.audio.shot(r.recoil);
-    if (!r.semi && this.ammo > 0) this.audio.bolt(0.12);
-    this.gun.fire();
-    if (this.scopeShown) this.ui.scopeFlash();
+    if (r.cls === 'sniper') { this.audio.shot(r.recoil); if (!r.semi && slot.ammo > 0) this.audio.bolt(0.12); }
+    else if (r.cls === 'auto') this.audio.auto(r.dmg >= 45);
+    else if (r.cls === 'pistol') this.audio.pistol(r.dmg >= 80);
+    else this.audio.rocket();
+    this.gun.fire(r.cls === 'auto' ? 0.45 : 1);
+    if (this.scopeShown && r.cls === 'sniper') this.ui.scopeFlash();
     this.camera.updateMatrixWorld();
     const origin = this.camera.getWorldPosition(new THREE.Vector3());
     const dir = new THREE.Vector3(0, 0, -1);
+    // The first shot always goes dead centre. Automatics and pistols drift on follow-up shots,
+    // and the crosshair opens up to show exactly how far.
+    const sp = this.spread * (this.scopeShown ? 0.5 : 1);
+    if (sp > 0) { const a = Math.random() * Math.PI * 2, d = Math.sqrt(Math.random()) * sp; dir.x += Math.cos(a) * d; dir.y += Math.sin(a) * d; dir.normalize(); }
     dir.applyQuaternion(this.camera.quaternion);
-    this.recoil += (this.scopeShown ? 0.028 : 0.05) * r.recoil;
-    this.recoilYaw += (Math.random() - 0.5) * 0.012 * r.recoil;
-    this.shake += 0.35 * r.recoil;
+    this.spread = Math.min(r.spreadMax || 0, this.spread + (r.heat || 0));
+    const K = { sniper: [0.05, 0.028], auto: [0.016, 0.011], pistol: [0.04, 0.03], rocket: [0.07, 0.05] }[r.cls];
+    this.recoil += (this.scopeShown ? K[1] : K[0]) * r.recoil;
+    this.recoilYaw += (Math.random() - 0.5) * (r.cls === 'auto' ? 0.008 : 0.012) * r.recoil;
+    this.shake += (r.cls === 'auto' ? 0.12 : 0.35) * r.recoil;
+    if (slot.ammo === 0) this.later(r.bolt * 0.6, () => this.startReload(slot), true);
+    if (r.cls === 'rocket') { this.launchRocket(origin, dir, r); return; }
 
     const shot = this.traceShot(origin, dir);
     // kill cam on the final kill, a boss kill, or now and then on a long headshot
     const kills = shot.res.filter(h => h.kind === 'z' && h.willKill);
     let cam = null;
-    if (save.settings.killcam && kills.length) {
+    if (r.cls === 'sniper' && save.settings.killcam && kills.length) {
       const L = this.level;
       const finalKill = this.mode === 'campaign' && L.type === 'defend' && !this.queue.some(q => q.type || q.boss) && this.aliveCount() === kills.length;
       const bossKill = kills.find(h => h.z.def.boss);
@@ -901,7 +1005,58 @@ export class Game {
     }
     if (cam) this.startKillcam(shot, cam);
     else this.applyShot(shot);
-    if (this.ammo === 0) this.later(r.bolt * 0.6, () => this.startReload(), true);
+  }
+
+  launchRocket(origin, dir, r) {
+    // Find where the crosshair points, then fly from the launcher's muzzle straight to that spot.
+    this.scene.updateMatrixWorld();
+    this.ray.set(origin, dir); this.ray.far = 420;
+    const hit = this.ray.intersectObjects(this.hittables, false)[0];
+    const aim = hit ? hit.point.clone() : origin.clone().addScaledVector(dir, 420);
+    const start = this.gun.muzzle.getWorldPosition(new THREE.Vector3());
+    if (start.distanceTo(origin) > 2) start.copy(origin).addScaledVector(dir, 0.6);
+    const rdir = aim.clone().sub(start).normalize();
+    // Rockets fly straight, so the scenery they will hit is known at launch.
+    this.ray.set(start, rdir); this.ray.far = 420;
+    const st = this.ray.intersectObjects(this.world.colliders, false)[0];
+    // Detonate at the spot under the crosshair, even if the infected there has stepped aside.
+    let maxD = st ? st.distance : 420;
+    if (hit) maxD = Math.min(maxD, start.distanceTo(aim) + 0.3);
+    const mesh = this.rocketProto.clone();
+    mesh.position.copy(start);
+    mesh.lookAt(V2.copy(start).add(rdir));
+    this.scene.add(mesh);
+    this.rockets.push({ mesh, flame: mesh.getObjectByName('flame'), pos: start.clone(), dir: rdir, speed: r.speed,
+      traveled: 0, maxD, dmg: r.dmg, blast: r.blast, trailT: 0 });
+  }
+
+  updateRockets(dt) {
+    if (!this.rockets.length) return;
+    const dyn = this.hittables.slice(this.world.colliders.length);
+    for (let i = this.rockets.length - 1; i >= 0; i--) {
+      const k = this.rockets[i];
+      const step = k.speed * dt;
+      let boom = null;
+      if (dyn.length) {
+        this.ray.set(k.pos, k.dir); this.ray.far = step + 0.3;
+        const h = this.ray.intersectObjects(dyn, false)[0];
+        if (h) boom = h.point.clone();
+      }
+      if (!boom && k.traveled + step >= k.maxD) boom = k.pos.clone().addScaledVector(k.dir, k.maxD - k.traveled);
+      if (boom) {
+        this.scene.remove(k.mesh);
+        this.rockets.splice(i, 1);
+        this.explodeAt(boom.addScaledVector(k.dir, -0.25), k.blast, k.dmg, { rocket: true });
+        continue;
+      }
+      k.pos.addScaledVector(k.dir, step);
+      k.traveled += step;
+      k.mesh.position.copy(k.pos);
+      if (k.flame) k.flame.scale.y = 0.3 + Math.random() * 0.25;
+      k.trailT -= dt;
+      // smoke starts a few metres out so it doesn't fill the view at launch
+      if (k.trailT <= 0 && k.traveled > 6) { k.trailT = 0.025; this.fx.puff(k.pos.clone().addScaledVector(k.dir, -0.5), 0xbab6ae, 0.22, 1.2, 1, 0.2); }
+    }
   }
 
   traceShot(origin, dir) {
@@ -920,8 +1075,9 @@ export class Game {
         if (!z.alive || seen.has(z)) continue;
         if (ud.part === 'helmet' && !z.helmet) continue;
         seen.add(z);
-        const dm = z.computeDamage(ud.part, this.rifle.dmg);
-        res.push({ kind: 'z', z, part: ud.part, point: h.point.clone(), dmg: dm, willKill: z.hp - dm.dmg <= 0 });
+        const base = this.damageAt(h.distance);
+        const dm = z.computeDamage(ud.part, base, this.rifle.hs);
+        res.push({ kind: 'z', z, part: ud.part, point: h.point.clone(), base, dmg: dm, willKill: z.hp - dm.dmg <= 0 });
         if (--pen <= 0) { end = h.point.clone(); break; }
       } else if (ud.survivor) {
         if (!ud.survivor.alive) continue;
@@ -946,8 +1102,8 @@ export class Game {
         const z = h.z;
         if (!z.alive) continue;
         hitAny = true;
-        const dm = z.computeDamage(h.part, this.rifle.dmg);
-        const out = z.hit(h.part, this.rifle.dmg, h.point, shot.dir, dm);
+        const dm = z.computeDamage(h.part, h.base, this.rifle.hs);
+        const out = z.hit(h.part, h.base, h.point, shot.dir, dm);
         this.stats.hits++;
         if (out.killed) { kills++; this.onKill(z, out.headshot); }
         else this.audio.hit(this.panOf(z.pos));
@@ -966,7 +1122,7 @@ export class Game {
       this.ui.feed(`${kills === 2 ? 'DOUBLE' : kills === 3 ? 'TRIPLE' : 'MULTI'} KILL  +$${bonus}`, 'gold');
       this.ui.bigText(kills === 2 ? 'DOUBLE KILL' : 'TRIPLE KILL', 'gold');
     }
-    if (!this.scopeShown && !cinematic) {
+    if (!cinematic && !(this.scopeShown && this.rifle.cls === 'sniper')) {
       const from = this.gun.muzzle.getWorldPosition(new THREE.Vector3());
       this.fx.shootTracer(from, shot.end);
     }
@@ -1108,7 +1264,7 @@ export class Game {
     this.rebuildHittables();
     this.world.barricade.setHealth(1);
     this.fov = BASE_FOV; this.camera.fov = BASE_FOV; this.camera.updateProjectionMatrix();
-    this.equip(save.equipped);
+    this.refreshLoadout();
   }
 
   // ------------------------------------------------------------ per frame
@@ -1143,6 +1299,7 @@ export class Game {
       if (this.survivors[i].removeMe) { const r = this.survivors[i].root; this.actors.remove(r); disposeOwned(r); this.survivors.splice(i, 1); removed = true; }
     }
     if (removed) this.rebuildHittables();
+    this.updateRockets(dt);
     this.fx.update(wdt, dt);
     this.world.update(wdt, this.time);
     for (let i = this.timers.length - 1; i >= 0; i--) {
@@ -1155,11 +1312,18 @@ export class Game {
 
   updatePlayer(dt) {
     const r = this.rifle;
-    if (this.chamber > 0) this.chamber = Math.max(0, this.chamber - dt);
-    if (this.reloading > 0) {
-      this.reloading -= dt;
-      if (this.reloading <= 0) { this.reloading = 0; this.ammo = r.mag; }
+    for (const sl of Object.values(this.slots)) {
+      if (sl.chamber > 0) sl.chamber = Math.max(0, sl.chamber - dt);
+      if (sl.reloading > 0) {
+        sl.reloading -= dt;
+        if (sl.reloading <= 0) {
+          sl.reloading = 0; sl.ammo = sl.w.mag;
+          if (sl !== this.cur && sl.cls === 'rocket' && this.state === 'playing') this.ui.feed('ROCKET LOADED', 'gold');
+        }
+      }
     }
+    if (this.switchT > 0) this.switchT = Math.max(0, this.switchT - dt);
+    this.spread = Math.max(0, this.spread - (r.cool || 1) * dt);
     if (this.scoped && !this.scopeShown && this.gun.adsK > 0.8) { this.scopeShown = true; this.ui.setScoped(true); }
     const targetFov = this.scopeShown ? BASE_FOV / this.zoomLevel() : BASE_FOV;
     this.fov += (targetFov - this.fov) * (1 - Math.exp(-dt * 18));
@@ -1167,7 +1331,7 @@ export class Game {
     this.recoil *= Math.exp(-dt * 7);
     this.recoilYaw *= Math.exp(-dt * 7);
     this.shake *= Math.exp(-dt * 9);
-    const sw = this.scopeShown ? r.sway * 0.0026 : 0.0005;
+    const sw = this.scopeShown ? (r.cls === 'sniper' ? r.sway * 0.0026 : 0.0004) : 0.0005;
     const t = this.time;
     const sx = (Math.sin(t * 0.9) * 0.7 + Math.sin(t * 2.1 + 1.3) * 0.3) * sw;
     const sy = (Math.sin(t * 1.3 + 2) * 0.6 + Math.sin(t * 2.9) * 0.3) * sw;
