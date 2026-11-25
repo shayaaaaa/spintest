@@ -1,0 +1,23 @@
+/* ---------- Hub tab ---------- */
+.hub { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.hub-scroll { flex: 1; min-height: 0; overflow: auto; -webkit-overflow-scrolling: touch; }
+.hub-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(132px, 1fr)); gap: 8px; }
+.hub-card { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; text-align: left; padding: 12px; border-radius: 14px; border: 1px solid var(--border); background: var(--bg-1); color: var(--text); min-height: 92px; }
+.hub-card:hover { border-color: var(--border-strong); background: var(--bg-hover); }
+.hub-card .ic { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); }
+.hub-card .ic svg { width: 19px; height: 19px; }
+.hub-card .t { font-weight: 650; font-size: 14.5px; }
+.hub-card .s { font-size: 12px; color: var(--text-3); margin-top: -6px; }
+.crumbs { display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; padding: 8px 12px; border-bottom: 1px solid var(--border); font-size: 13.5px; white-space: nowrap; }
+.crumbs::-webkit-scrollbar { display: none; }
+.crumbs button { border: 0; background: none; color: var(--text-2); padding: 4px 6px; border-radius: 7px; }
+.crumbs button:last-child { color: var(--text); font-weight: 650; }
+.crumbs button:hover { background: var(--bg-hover); }
+.crumbs .sep { color: var(--text-4); }
+.fl-item .li-icon.dir { color: var(--accent); background: var(--accent-soft); }
+.viewer { display: flex; flex-direction: column; height: min(78vh, 900px); }
+.viewer .editor-host { border: 1px solid var(--border); border-radius: 10px; }
+.viewer img, .viewer video { max-width: 100%; max-height: 70vh; border-radius: 10px; margin: 0 auto; display: block; }
+.viewer object, .viewer iframe { flex: 1; border: 0; border-radius: 10px; width: 100%; background: #fff; }
+.search-results .li-sub { white-space: normal; }
+.hl { background: color-mix(in srgb, var(--warn) 30%, transparent); border-radius: 3px; }
