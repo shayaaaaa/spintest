@@ -133,9 +133,9 @@ Verification:
 
 `src/core/setup.js` installs everything once, automatically, a few seconds after the first launch:
 - **Steps:** offline engine cache (service worker), Linux VM (install + first boot), Python with numpy/pandas/matplotlib,
-  ffmpeg, the MiniLM search model, and the Agent/Chat GGUF (Qwen3 4B Instruct, or a smaller one if it doesn't fit
-  memory).
-- **Order:** the model download starts first and runs alongside the other steps.
+  ffmpeg, and the MiniLM search model.
+- **Chat models:** never downloaded automatically; the user picks them in Studio → Models. A one-time cleanup
+  removes an unfinished Qwen3 4B download started by an earlier version (a finished one is kept).
 - **Records:** each finished step is recorded in settings (`setup.steps`) and never repeats; a failed step is retried
   on the next launch, and the run waits for `online` when offline.
 - **UI:** `src/ui/setup-bar.js` shows progress (bar above the tabs plus a checklist sheet).

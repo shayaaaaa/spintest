@@ -1,12 +1,11 @@
 // First launch on a brand-new device: the app installs everything by itself (offline files, Linux VM + first boot,
-// Python, ffmpeg, search model, Agent/Chat model), then each piece works without the user typing anything.
-// The real model is Qwen3 4B (2.5 GB); this test swaps in Qwen3 0.6B to keep the download short.
+// Python, ffmpeg, search model), then each piece works without the user typing anything. Chat models are left to the
+// user: none is downloaded automatically.
 import { setupPersistent, openApp, DUO, stopServer } from './lib.mjs';
 
 const { ctx, base, close } = await setupPersistent({ port: 8087, size: DUO.folded });
 await ctx.addInitScript(() => {
   Object.defineProperty(Navigator.prototype, 'webdriver', { get: () => false }); // behave like a normal browser
-  globalThis.__aiaSetupModel = { name: 'Qwen3 0.6B', repo: 'unsloth/Qwen3-0.6B-GGUF', file: 'Qwen3-0.6B-Q4_K_M.gguf', sizeGB: 0.4, params: '0.6B', context: 8192, tags: ['tiny', 'tools'] };
 });
 const { page, logs } = await openApp(null, base, { size: DUO.folded, ctx });
 page.setDefaultTimeout(1800000);
@@ -32,14 +31,15 @@ console.log(`[${secs()}] setup finished: done=${st.done}`);
 await page.waitForTimeout(1000);
 check('setup ran by itself and finished', st.done);
 check('setup progress bar was shown', sawBar);
-check('notices: started and finished', toasts.some(t => /Setting up Ai Agent/.test(t)) && toasts.some(t => /Ai Agent is ready/.test(t)), JSON.stringify(toasts));
+check('notices: started and finished', toasts.some(t => /Setting up Ai Agent/.test(t)) && toasts.some(t => /set up and works offline/.test(t)), JSON.stringify(toasts));
 
 const r = await page.evaluate(async () => {
   const out = {};
   const reg = await import('./src/models/registry.js');
   await reg.refreshModels();
-  out.model = reg.modelsStore.get().local.find(m => m.kind === 'llm' && m.status === 'ready')?.name || null;
-  out.chatModels = reg.chatModels().length;
+  out.llms = reg.modelsStore.get().local.filter(m => m.kind === 'llm').map(m => m.name);
+  const { downloads } = await import('./src/models/downloader.js');
+  out.downloadJobs = downloads.get().jobs.map(j => j.name);
   const L = await import('./src/runtimes/linux.js');
   out.linuxPrepared = await L.isPrepared();
   // A command jsh doesn't have runs in Linux without typing "linux".
@@ -65,10 +65,24 @@ const r = await page.evaluate(async () => {
   const { showTab } = await import('./src/ui/layout.js'); showTab('agent');
   await new Promise(r => setTimeout(r, 800));
   out.noModelWarning = /No model yet/.test(document.body.textContent);
+  // One-time cleanup of an unfinished chat-model download started by an earlier version; a finished one is kept.
+  const { setSetting } = await import('./src/core/settings.js');
+  const { runSetup } = await import('./src/core/setup.js');
+  const partial = '/models/llm/Qwen3-4B-Instruct-2507-Q4_K_M';
+  await vfs.writeJSON(`${partial}/manifest.json`, { id: 'Qwen3-4B-Instruct-2507-Q4_K_M', name: 'Qwen3 4B Instruct 2507', kind: 'llm', engine: 'gguf', status: 'downloading' });
+  await vfs.write(`${partial}/part.gguf`, new Uint8Array(1024));
+  setSetting('setup.noAutoModel', false);
+  await runSetup(); await new Promise(r => setTimeout(r, 1500));
+  out.partialRemoved = !(await vfs.exists(partial));
+  await vfs.writeJSON(`${partial}/manifest.json`, { id: 'x', name: 'Qwen3 4B Instruct 2507', kind: 'llm', engine: 'gguf', status: 'ready' });
+  setSetting('setup.noAutoModel', false);
+  await runSetup(); await new Promise(r => setTimeout(r, 1500));
+  out.finishedKept = await vfs.exists(`${partial}/manifest.json`);
+  await vfs.rm(partial);
   return out;
 });
 console.log(JSON.stringify(r));
-check('Agent & Chat model installed', !!r.model && r.chatModels > 0, r.model);
+check('no chat model downloaded automatically', !r.llms.length && !r.downloadJobs.length, JSON.stringify({ llms: r.llms, jobs: r.downloadJobs }));
 check('Linux VM installed and first boot done', r.linuxPrepared);
 check('unknown commands run in Linux automatically', r.unknownCmd.endsWith('i686') && r.unknownCmdMs < 30000, `${r.unknownCmd} in ${(r.unknownCmdMs / 1000).toFixed(1)}s`);
 check('arguments keep their quoting in Linux', r.quoting.endsWith('two words single quoted'), r.quoting);
@@ -77,7 +91,9 @@ check('ffmpeg installed', r.ffmpeg);
 check('search model installed', r.search === 'ready', r.search);
 check('app files cached for offline use', r.cachedFiles > 100, r.cachedFiles);
 check('setup marked complete', r.completed);
-check('Agent welcome no longer says "No model yet"', !r.noModelWarning);
+check('Agent welcome still invites picking a model', r.noModelWarning);
+check('unfinished automatic model download from an earlier version is removed', r.partialRemoved);
+check('a finished model is kept', r.finishedKept);
 
 // Second launch: nothing to do, no bar, no notices.
 const before = toasts.length;

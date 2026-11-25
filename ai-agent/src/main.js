@@ -77,7 +77,8 @@ async function boot() {
   if (q.get('shortcut-result')) bus.emit('shortcut-result', { id: q.get('id'), result: q.get('shortcut-result') });
   if (q.toString()) history.replaceState(null, '', location.pathname + location.hash);
   // First launch: install everything the app needs automatically (offline files, Linux VM with its first boot,
-  // Python, ffmpeg, the search model and the Agent/Chat model). Only missing pieces run on later launches.
+  // Python, ffmpeg and the search model). Chat models are the user's choice (Studio → Models).
+  // Only missing pieces run on later launches.
   import('./runtimes/linux.js').then(L => L.isPrepared()).catch(() => {});
   setTimeout(async () => {
     try {
@@ -86,7 +87,7 @@ async function boot() {
       const offS = bus.on('setup-started', () => toast('Setting up Ai Agent: installing everything it needs in the background. You can keep using the app.', 'info', 6000));
       const offF = bus.on('setup-finished', ({ failed }) => {
         offS(); offF();
-        if (!failed.length) toast('Ai Agent is ready: everything is installed and works offline.', 'ok', 7000);
+        if (!failed.length) toast('Ai Agent is set up and works offline. Pick a model in Studio → Models whenever you like.', 'ok', 7000);
         else toast('Setup paused (network or storage). It continues automatically next time the app opens.', 'warn', 7000);
       });
       await runSetup();

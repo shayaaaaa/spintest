@@ -239,7 +239,7 @@ function AutoSetup() {
   const auto = useStore(settings, x => x.setup?.auto !== false);
   const completed = useStore(settings, x => x.setup?.completed);
   return html`<div class="card"><div class="card-title">Automatic setup</div>
-    <div class="small dim">On first launch Ai Agent installs everything it needs by itself: offline app files, the Linux VM (with its first boot), Python, ffmpeg, the search model and the Agent & Chat model. Anything missing is picked up on the next launch.</div>
+    <div class="small dim">On first launch Ai Agent installs everything it needs by itself: offline app files, the Linux VM (with its first boot), Python, ffmpeg and the search model. Chat models are your pick in Studio → Models. Anything missing is picked up on the next launch.</div>
     ${s.running ? html`<div style="margin-top:10px"><${SetupList} /></div>`
       : completed ? html`<div class="small ok" style="margin-top:8px">✓ Everything installed (${new Date(completed).toLocaleDateString()})</div>`
       : html`<div class="small warn" style="margin-top:8px">Not finished yet: it continues automatically when the app opens online.</div>`}

@@ -1,5 +1,5 @@
 // First-run setup: installs everything the app needs, automatically and once, the first time it opens.
-// The big model download starts first (it runs in the background), the smaller pieces install one after another.
+// Chat/agent models are not part of it: the user picks those in Studio → Models.
 // Each step records "done" in settings so it never repeats; a step that fails is retried on the next launch.
 import { createStore } from './store.js';
 import { settings, setSetting } from './settings.js';
@@ -13,17 +13,6 @@ const markDone = (id) => setSetting(`setup.steps.${id}`, 'done');
 const patchStep = (id, patch) => setupStore.set(s => ({ ...s, steps: s.steps.map(x => x.id === id ? { ...x, ...patch } : x) }));
 const timeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error(`${what} did not respond`)), ms))]);
 
-async function pickModel() {
-  if (globalThis.__aiaSetupModel) return globalThis.__aiaSetupModel; // tests use a small model
-  const { GGUF_CATALOG, memNeedGB } = await import('../models/catalog.js');
-  const { memoryBudgetGB } = await import('./platform.js');
-  const budget = memoryBudgetGB();
-  const fits = (m) => memNeedGB(m.sizeGB, m.context, m.params) <= budget * 0.6;
-  return GGUF_CATALOG.find(m => m.tags?.includes('recommended') && fits(m))
-    || GGUF_CATALOG.filter(m => m.tags?.includes('tools') && fits(m)).sort((a, b) => b.sizeGB - a.sizeGB)[0]
-    || GGUF_CATALOG.find(m => m.tags?.includes('tiny'));
-}
-
 // ---------- steps ----------
 const STEPS = {
   offline: {
@@ -36,37 +25,6 @@ const STEPS = {
         const offP = bus.on('cache-engines-progress', (d) => update({ progress: d.total ? d.done / d.total : 0, text: `${d.done} of ${d.total} files` }));
         const offD = bus.on('cache-engines-done', () => { offP(); offD(); resolve(); });
         reg.active.postMessage({ type: 'cache-engines' });
-      });
-    },
-  },
-  model: {
-    label: 'Agent & Chat model', size: '2.5 GB',
-    async isDone(force) {
-      if (!force && stepDone('model')) return true;
-      const { modelsStore, refreshModels } = await import('../models/registry.js');
-      if (!modelsStore.get().local.length) await refreshModels();
-      return modelsStore.get().local.some(m => m.kind === 'llm' && m.status === 'ready' && m.engine !== 'forge');
-    },
-    async run(update) {
-      const m = await pickModel();
-      update({ label: `${m.name} (Agent & Chat model)`, size: `${m.sizeGB} GB` });
-      const { installGGUF } = await import('../models/registry.js');
-      const { downloads, restorePending, resume } = await import('../models/downloader.js');
-      await restorePending();
-      const want = (j) => j.name === m.name;
-      const pending = downloads.get().jobs.find(want);
-      if (pending) { if (pending.status !== 'done') resume(pending.id); }
-      else await installGGUF(m);
-      await new Promise((resolve, reject) => {
-        const check = (s) => {
-          const j = s.jobs.find(want);
-          if (!j) return;
-          update({ progress: j.total ? j.loaded / j.total : 0, text: j.status === 'paused' ? 'paused (waiting for the network)' : `${Math.round(j.loaded / 1e6)} of ${Math.round(j.total / 1e6)} MB` });
-          if (j.status === 'done') { off(); resolve(); }
-          else if (j.status === 'error') { off(); reject(new Error(j.error || 'download failed')); }
-        };
-        const off = downloads.subscribe(check);
-        check(downloads.get());
       });
     },
   },
@@ -122,21 +80,34 @@ async function runStep(id) {
   }
 }
 
+// One-time cleanup: an earlier version also downloaded Qwen3 4B Instruct automatically. Models are now the user's
+// pick, so an unfinished automatic download of it is removed (a finished one is kept; it can be deleted in Models).
+async function dropAutoModel() {
+  if (settings.get().setup?.noAutoModel) return;
+  setSetting('setup.noAutoModel', true);
+  const dir = '/models/llm/Qwen3-4B-Instruct-2507-Q4_K_M';
+  const man = await vfs.readJSON(`${dir}/manifest.json`, null);
+  if (!man || man.status === 'ready') return;
+  const { downloads, cancel } = await import('../models/downloader.js');
+  const job = downloads.get().jobs.find(j => j.dir === dir);
+  if (job) await cancel(job.id); else await vfs.rm(dir).catch(() => {});
+  await (await import('../models/registry.js')).refreshModels();
+}
+
 let running = null;
 // Runs whatever is still missing. Automatic on launch (opt out: Settings → Storage & offline); force for "Run again".
 export function runSetup({ force = false } = {}) {
   if (running) return running;
+  dropAutoModel().catch(() => {});
   if (!force && (settings.get().setup?.auto === false || navigator.webdriver)) return Promise.resolve(null);
   running = (async () => {
     const todo = [];
-    for (const id of ['model', ...ORDER]) if (!(await STEPS[id].isDone(force))) todo.push(id);
+    for (const id of ORDER) if (!(await STEPS[id].isDone(force))) todo.push(id);
     if (!todo.length) { setupStore.set({ running: false, done: true, steps: [] }); return 'ready'; }
     if (!navigator.onLine) { addEventListener('online', () => runSetup({ force }), { once: true }); return null; }
     setupStore.set({ running: true, done: false, error: null, steps: todo.map(id => ({ id, label: STEPS[id].label, size: STEPS[id].size, state: 'pending', progress: 0, text: '' })) });
     bus.emit('setup-started', todo);
-    const model = todo.includes('model') ? runStep('model') : null; // big download in the background
     for (const id of ORDER) if (todo.includes(id)) await runStep(id);
-    await model;
     const failed = setupStore.get().steps.filter(s => s.state === 'error');
     setupStore.set(s => ({ ...s, running: false, done: !failed.length }));
     if (!failed.length) setSetting('setup.completed', Date.now());

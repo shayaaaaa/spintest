@@ -29,9 +29,9 @@ panes and a single pane.
      automatically, for you and for the agent, starting in about a second.
    - **Python** with numpy, pandas and matplotlib, and **ffmpeg** for audio/video
    - the **search model** for memory and knowledge search (23 MB)
-   - the **Agent & Chat model**, Qwen3 4B Instruct (2.5 GB, or a smaller one if the device has less memory)
 
-   "Ai Agent is ready" appears when everything is installed. If the app closes or the network drops, setup continues
+   A notice appears when everything is installed. Then pick a chat model yourself in **Studio → Models** (nothing
+   large is downloaded without you choosing it); *Qwen3 4B Instruct* (2.5 GB) is a good agent model. If the app closes or the network drops, setup continues
    by itself the next time it opens. Settings → Storage & offline → *Automatic setup* shows the status, turns it off,
    or installs anything you removed. The app also asks iOS to keep its storage, so models aren't evicted.
 
