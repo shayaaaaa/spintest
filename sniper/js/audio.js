@@ -130,6 +130,26 @@ export class Sound {
     this._noise(1.1, { type: 'bandpass', f0: 500, f1: 2200, q: 0.9, gain: 0.4, attack: 0.05 });
   }
 
+  // Horde mode: a zombie clawing out of the ground
+  deploy() {
+    if (!this.ok) return;
+    this._noise(0.22, { type: 'lowpass', f0: 900, f1: 220, q: 0.8, gain: 0.35 });
+    this._tone(220, 0.16, { f1: 110, gain: 0.08, type: 'triangle' });
+  }
+
+  roar() {
+    if (!this.ok) return;
+    this.lastGroan = -99;
+    this.groan(0, 0.5, 0.65);
+    this._noise(1.0, { type: 'bandpass', f0: 300, f1: 140, q: 1.2, gain: 0.45, attack: 0.15 });
+    this._tone(70, 1.0, { f1: 55, gain: 0.35, type: 'sawtooth', lp: 400, attack: 0.15 });
+  }
+
+  fog() {
+    if (!this.ok) return;
+    this._noise(1.6, { type: 'bandpass', f0: 300, f1: 900, q: 0.6, gain: 0.3, attack: 0.5 });
+  }
+
   click(delay = 0, f = 2600, gain = 0.25) {
     if (!this.ok) return;
     this._noise(0.05, { type: 'bandpass', f0: f, q: 6, gain, delay });

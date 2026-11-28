@@ -1,5 +1,7 @@
 // Menus, HUD, scope overlay, radar and input wiring.
-import { WEAPONS, CLASSES, UPGRADES, ITEMS, WALL_LEVELS, MAPS, LEVELS, ZOMBIES, weaponStats, weaponById, upgradeCost, upgradeInfo, levelObjective } from './data.js';
+import { WEAPONS, CLASSES, UPGRADES, ITEMS, WALL_LEVELS, MAPS, LEVELS, ZOMBIES, weaponStats, weaponById, upgradeCost, upgradeInfo, levelObjective,
+  HORDE_LEVELS, HORDE_UNITS, HORDE_ABILITIES, HIVE, MUTATION, HORDE_UNLOCK_MISSION, mutationCost } from './data.js';
+import { hordeOpen, unitDef, abilityStats, brainIncome, fmtTime } from './horde.js';
 import { save, persist, resetSave, upgOf } from './save.js';
 
 const $ = id => document.getElementById(id);
@@ -14,6 +16,27 @@ const ICON = {
   lock: '<svg class="ty" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>',
 };
 const TYPE_NAME = { defend: 'Defend', rescue: 'Rescue', boss: 'Boss' };
+const BRAIN = '<svg viewBox="0 0 24 24"><path d="M10.5 4.5a3 3 0 0 0-4.6 1.6A3.2 3.2 0 0 0 3.5 10a3.3 3.3 0 0 0 .6 4.5 3.2 3.2 0 0 0 3 4 3 3 0 0 0 3.4 1.2V4.5zm3 0a3 3 0 0 1 4.6 1.6A3.2 3.2 0 0 1 20.5 10a3.3 3.3 0 0 1-.6 4.5 3.2 3.2 0 0 1-3 4 3 3 0 0 1-3.4 1.2V4.5z" fill="#f29bb0" stroke="#8a3a52" stroke-width="1.4"/></svg>';
+// Little zombie portraits for the Horde cards and the Lab.
+const ZLOOK = { walker: ['#8fb36a', '#7a4b3a', '#ffe14a'], runner: ['#8fb36a', '#a33a32', '#ff5a3a'], soldier: ['#8fb36a', '#5d6b3e', '#ffe14a'],
+  bloater: ['#a9b860', '#7a7a50', '#d8ff3a'], brute: ['#7d9a5e', '#8a8a7a', '#ffe14a'], boss: ['#9a8a72', '#5a4a44', '#ff2a1a'] };
+function zicon(key) {
+  const [skin, shirt, eye] = ZLOOK[key];
+  const bw = key === 'brute' || key === 'boss' || key === 'bloater' ? 28 : key === 'runner' ? 14 : 19;
+  let s = `<svg class="z" viewBox="0 0 40 40"><rect x="${20 - bw / 2}" y="24" width="${bw}" height="15" rx="2" fill="${shirt}"/>`;
+  if (key === 'boss') s += '<rect x="14" y="26" width="12" height="13" fill="#cfc6b0"/><path d="M5 26l3-6 3 6zM29 26l3-6 3 6z" fill="#e6dcc0"/>';
+  if (key === 'bloater') s += '<circle cx="13" cy="31" r="2.2" fill="#d8ff3a"/><circle cx="25" cy="29" r="1.8" fill="#d8ff3a"/><circle cx="21" cy="35" r="1.5" fill="#d8ff3a"/>';
+  s += `<rect x="10" y="5" width="20" height="19" rx="2" fill="${skin}"/><rect x="13" y="12" width="5" height="3" fill="${eye}"/><rect x="22" y="12" width="5" height="3" fill="${eye}"/><rect x="15" y="18" width="10" height="2" fill="#3a1414"/>`;
+  if (key === 'soldier') s += '<rect x="9" y="3" width="22" height="7" rx="2" fill="#4e5a39"/>';
+  return s + '</svg>';
+}
+const UNIT_NAME = key => key === 'boss' ? 'Butcher' : ZOMBIES[key].name;
+const AICON = {
+  fog: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 10h11M7 14h13M3 18h12M9 6h8"/></svg>',
+  roar: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 9v6h4l5 4V5L8 9z"/><path d="M16 9a4 4 0 0 1 0 6M19 6a8 8 0 0 1 0 12"/></svg>',
+  burrow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 16h18M6 20h12"/><path d="M12 3v9M8 8l4 4 4-4"/></svg>',
+};
+const DEF_LABEL = { sniper: 'Sniper', gunner: 'Machine gunner', rocket: 'Rockets' };
 // Weapon class silhouettes for the HUD weapon bar and armory tabs.
 const WICON = {
   sniper: '<svg viewBox="0 0 48 24" fill="currentColor"><path d="M2 12.5h27l2-1.5h15v2.5H33l-2 1.5h-9l-2.5 5h-4l1.5-5H2z"/><rect x="13" y="7.5" width="13" height="3" rx="1.5"/><rect x="17" y="10" width="2" height="2"/></svg>',
@@ -33,6 +56,10 @@ export class UI {
     this.shopCls = 'sniper';
     this.shopRifle = save.loadout.sniper;
     this.portraitOk = false;
+    this.hordeTab = 'sieges';
+    this.hMap = 0;
+    this.hSel = Math.min(save.horde.unlocked, HORDE_LEVELS.length - 1);
+    this.hMap = HORDE_LEVELS[this.hSel].map;
     this.cache = {};
     this.frameN = 0;
     this.range = null;
@@ -63,6 +90,7 @@ export class UI {
 
     this.bindControls();
     this.bindMenus();
+    this.bindHorde();
     this.resize();
     window.addEventListener('orientationchange', () => setTimeout(() => this.checkOrientation(), 300));
     document.addEventListener('visibilitychange', () => { if (document.hidden && this.g.state === 'playing') this.pause(); });
@@ -76,21 +104,58 @@ export class UI {
     const touch = $('touch');
     let lookId = null, lx = 0, ly = 0;
     touch.addEventListener('contextmenu', e => e.preventDefault());
+    const pts = new Map();
+    let tap = null, pinch0 = 0;
+    const spread = () => { const a = [...pts.values()]; return a.length < 2 ? 0 : Math.hypot(a[0].x - a[1].x, a[0].y - a[1].y); };
     touch.addEventListener('pointerdown', e => {
+      if (g.mode === 'horde') {
+        pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        try { touch.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+        if (pts.size === 1) tap = { moved: 0 }; else { tap = null; pinch0 = spread(); }
+        return;
+      }
       if (e.pointerType === 'mouse' && e.button === 2) { g.toggleScope(); return; }
       if (lookId !== null) return;
       lookId = e.pointerId; lx = e.clientX; ly = e.clientY;
       try { touch.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
     });
     touch.addEventListener('pointermove', e => {
+      if (g.mode === 'horde') {
+        const p = pts.get(e.pointerId);
+        if (!p) return;
+        const dx = e.clientX - p.x, dy = e.clientY - p.y;
+        p.x = e.clientX; p.y = e.clientY;
+        if (pts.size === 1) {
+          if (tap) tap.moved += Math.abs(dx) + Math.abs(dy);
+          if (!tap || tap.moved > 10) g.hordePan(dx, dy);
+        } else if (pts.size === 2) {
+          const d = spread();
+          if (pinch0 && d) g.hordeZoom(pinch0 / d);
+          pinch0 = d;
+        }
+        return;
+      }
       if (e.pointerId !== lookId) return;
       g.look(e.clientX - lx, e.clientY - ly);
       lx = e.clientX; ly = e.clientY;
     });
-    const endLook = e => { if (e.pointerId === lookId) lookId = null; };
+    const endLook = e => {
+      if (pts.has(e.pointerId)) {
+        if (e.type === 'pointerup' && pts.size === 1 && tap && tap.moved <= 10) g.hordeTap(e.clientX, e.clientY);
+        pts.delete(e.pointerId);
+        if (pts.size < 2) pinch0 = 0;
+        if (pts.size === 0) tap = null;
+        return;
+      }
+      if (e.pointerId === lookId) lookId = null;
+    };
     touch.addEventListener('pointerup', endLook);
     touch.addEventListener('pointercancel', endLook);
-    touch.addEventListener('wheel', e => { if (g.scoped) g.setZoom(g.zoomT - e.deltaY * 0.0012); e.preventDefault(); }, { passive: false });
+    touch.addEventListener('wheel', e => {
+      if (g.mode === 'horde') g.hordeZoom(1 + e.deltaY * 0.0012);
+      else if (g.scoped) g.setZoom(g.zoomT - e.deltaY * 0.0012);
+      e.preventDefault();
+    }, { passive: false });
 
     const fire = $('btnFire');
     let fireId = null, fx = 0, fy = 0;
@@ -138,6 +203,14 @@ export class UI {
     window.addEventListener('keydown', e => {
       if (e.repeat) return;
       const k = e.key.toLowerCase();
+      if (g.mode === 'horde' && g.state === 'playing' && this.screen === null) {
+        if (k >= '1' && k <= '6') { const u = HORDE_UNITS[+k - 1]; if (u) g.selectCard(u.key); }
+        else if (k === 'z') g.useAbility('fog');
+        else if (k === 'x') g.useAbility('roar');
+        else if (k === 'c') g.useAbility('burrow');
+        else if (k === 'escape' || k === 'p') this.pause();
+        return;
+      }
       if (g.state === 'playing' && this.screen === null) {
         if (k === ' ' || k === 'f') { g.fire(); e.preventDefault(); }
         else if (k === 'e' || k === 'q' || k === 'shift') g.toggleScope();
@@ -226,9 +299,12 @@ export class UI {
 
   show(name) {
     if (this.screen === 'armory' && name !== 'armory') { this.g.gun.showcase = false; this.g.refreshLoadout(); }
-    for (const id of ['menu', 'campaign', 'survival', 'armory', 'settings', 'pause', 'result']) $(id).hidden = id !== name;
+    for (const id of ['menu', 'campaign', 'survival', 'armory', 'settings', 'pause', 'result', 'horde']) $(id).hidden = id !== name;
     this.screen = name;
-    $('hud').hidden = name !== null;
+    const horde = this.g && this.g.mode === 'horde';
+    $('hud').hidden = name !== null || horde;
+    $('hhud').hidden = !(name === null && horde);
+    if (name === 'horde') this.renderHorde();
     if (name === 'menu') this.renderMenu();
     if (name === 'campaign') this.renderCampaign();
     if (name === 'survival') this.renderSurvival();
@@ -242,6 +318,7 @@ export class UI {
   updateCash() { for (const el of document.querySelectorAll('[data-cash]')) el.textContent = fmt(save.cash); }
 
   renderMenu() {
+    $('hordeLock').textContent = hordeOpen() ? '' : 'LOCKED';
     const s = save.stats;
     const acc = s.shots ? Math.round(s.hits / s.shots * 100) + '%' : '—';
     const done = save.stars.filter(x => x > 0).length;
@@ -450,7 +527,8 @@ export class UI {
 
   restart() {
     const g = this.g;
-    if (g.mode === 'survival') g.startSurvival(g.level.map);
+    if (g.mode === 'horde') g.startHorde(g.hordeIndex, g.hordeMap);
+    else if (g.mode === 'survival') g.startSurvival(g.level.map);
     else g.startCampaign(g.level.i);
     this.show(null);
   }
@@ -502,7 +580,7 @@ export class UI {
   // ---------------------------------------------------------- HUD effects (called by the game)
   feedClear() { $('feed').innerHTML = ''; }
   feed(text, kind) {
-    const f = $('feed');
+    const f = this.g && this.g.mode === 'horde' ? $('hfeed') : $('feed');
     const d = document.createElement('div');
     d.textContent = text;
     if (kind) d.className = kind;
@@ -584,6 +662,7 @@ export class UI {
     this.frameN++;
     if (this.screen !== null) return;
     if (g.state !== 'playing' && g.state !== 'killcam' && g.state !== 'over') return;
+    if (g.mode === 'horde') { this.frameHorde(dt); return; }
     // keyboard aiming for desktop players
     if (this.keys.size && g.state === 'playing') {
       const s = 420 * dt;
@@ -644,6 +723,256 @@ export class UI {
       this.drawScope(zl);
     }
     if (this.frameN % 2 === 0) this.drawRadar();
+  }
+
+  // ---------------------------------------------------------- Horde mode
+  bindHorde() {
+    const g = this.g, cards = $('cards'), ghost = $('ghost');
+    let drag = null;
+    cards.addEventListener('pointerdown', e => {
+      const b = e.target.closest('.zc');
+      if (!b) return;
+      e.preventDefault();
+      g.selectCard(b.dataset.unit);
+      drag = { id: e.pointerId, key: b.dataset.unit, x0: e.clientX, y0: e.clientY, moved: false };
+      try { b.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    });
+    cards.addEventListener('pointermove', e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      if (drag.moved || Math.hypot(e.clientX - drag.x0, e.clientY - drag.y0) > 22) {
+        if (!drag.moved) { drag.moved = true; ghost.innerHTML = zicon(drag.key); ghost.hidden = false; }
+        ghost.style.left = e.clientX + 'px'; ghost.style.top = e.clientY + 'px';
+      }
+    });
+    const end = e => {
+      if (!drag || e.pointerId !== drag.id) return;
+      ghost.hidden = true;
+      if (drag.moved && e.type === 'pointerup') g.hordeTap(e.clientX, e.clientY, drag.key);
+      drag = null;
+    };
+    cards.addEventListener('pointerup', end);
+    cards.addEventListener('pointercancel', end);
+    $('abils').addEventListener('pointerdown', e => { const b = e.target.closest('.abil'); if (!b) return; e.preventDefault(); g.useAbility(b.dataset.ab); });
+    $('hzoom').addEventListener('pointerdown', e => { const b = e.target.closest('button'); if (!b) return; e.preventDefault(); g.hordeZoom(+b.dataset.z); });
+    $('hPause').addEventListener('click', () => this.pause());
+    $('hTabs').addEventListener('click', e => {
+      const b = e.target.closest('button'); if (!b) return;
+      this.audio.ui(); this.hordeTab = b.dataset.v; this.renderHorde();
+    });
+  }
+
+  renderHorde() {
+    const H = save.horde, open = hordeOpen();
+    $('dnaPill').textContent = `${H.dna.toLocaleString('en-US')} DNA`;
+    for (const b of $('hTabs').querySelectorAll('button')) b.classList.toggle('on', b.dataset.v === this.hordeTab);
+    $('hSieges').hidden = this.hordeTab !== 'sieges';
+    $('hLab').hidden = this.hordeTab !== 'lab';
+    if (this.hordeTab === 'lab') { this.renderLab(); return; }
+    const tabs = $('hMapTabs');
+    tabs.innerHTML = '';
+    MAPS.forEach((m, i) => {
+      const mOpen = H.unlocked >= i * 4;
+      const stars = HORDE_LEVELS.filter(L => L.map === i).reduce((a, L) => a + (H.stars[L.i] || 0), 0);
+      const b = document.createElement('button');
+      b.className = 'tab' + (i === this.hMap ? ' on' : '');
+      b.disabled = !mOpen;
+      b.innerHTML = `${m.name}<small>${mOpen ? stars + '/12 ★' : 'locked'}</small>`;
+      b.addEventListener('click', () => {
+        this.audio.ui(); this.hMap = i;
+        const avail = HORDE_LEVELS.filter(L => L.map === i && L.i <= H.unlocked);
+        this.hSel = avail.length ? avail[avail.length - 1].i : i * 4;
+        if (this.g.state === 'menu' && this.g.mapIndex !== i) this.g.loadMap(i);
+        this.renderHorde();
+      });
+      tabs.appendChild(b);
+    });
+    const grid = $('hGrid');
+    grid.innerHTML = '';
+    for (const L of HORDE_LEVELS.filter(x => x.map === this.hMap)) {
+      const lvOpen = L.i <= H.unlocked;
+      const st = H.stars[L.i] || 0;
+      const b = document.createElement('button');
+      b.className = 'lv' + (L.i === this.hSel ? ' sel' : '') + (lvOpen ? '' : ' locked');
+      b.disabled = !lvOpen;
+      b.innerHTML = `<span class="n">${String(L.i + 1).padStart(2, '0')}</span>${lvOpen ? '' : ICON.lock}<span class="st">${STAR(st >= 1)}${STAR(st >= 2)}${STAR(st >= 3)}</span>`;
+      b.addEventListener('click', () => { this.audio.ui(); this.hSel = L.i; this.renderHorde(); });
+      grid.appendChild(b);
+    }
+    const eb = document.createElement('button');
+    eb.className = 'lv' + (this.hSel === 'endless' ? ' sel' : '');
+    eb.innerHTML = `<span class="n">∞</span><span class="nn">ENDLESS · BEST ${H.best || 0}</span>`;
+    eb.addEventListener('click', () => { this.audio.ui(); this.hSel = 'endless'; this.renderHorde(); });
+    grid.appendChild(eb);
+
+    const det = $('hDetail');
+    let html;
+    if (this.hSel === 'endless') {
+      html = `<div class="lbl">Endless siege · ${MAPS[this.hMap].name}</div><h2>Endless Siege</h2>
+        <p>Break one outpost after another. Each rebuilt wall is stronger and better defended, and unspent brains carry over. You have 2:30 per outpost.</p>
+        <div class="row kv"><span>Best <b>${H.best || 0} outposts</b></span><span>Reward <b>80 DNA</b> per outpost</span></div>`;
+    } else {
+      const L = HORDE_LEVELS[this.hSel];
+      const st = H.stars[L.i] || 0;
+      const chips = L.defenders.map(d => `<span class="chip" style="border-color:#ff6a5a"><b>${DEF_LABEL[d.kind]}</b> ${weaponById(d.w).name}</span>`).join('');
+      const reward = st > 0 ? Math.round(L.reward * 0.4) : L.reward;
+      html = `<div class="lbl">Siege ${String(L.i + 1).padStart(2, '0')} · ${MAPS[L.map].name}</div><h2>${L.name}</h2>
+        <p>Break the wall before time runs out. The sniper shows a red laser before it fires, and its status turns green while it reloads.</p>
+        <div class="chips">${chips}</div>
+        <div class="row kv"><span>Wall <b>${L.wall.toLocaleString('en-US')}</b> · Time <b>${fmtTime(L.time)}</b></span><span class="st" style="display:flex;gap:2px">${STAR(st >= 1)}${STAR(st >= 2)}${STAR(st >= 3)}</span></div>
+        <div class="row kv"><span>Reward up to <b>${reward} DNA</b>${st > 0 ? ' (replay)' : ''}</span></div>`;
+    }
+    if (!open) {
+      html += `<p class="kv" style="margin:0">Horde mode opens after you finish all ${HORDE_UNLOCK_MISSION} Hollow Creek missions in the campaign. You have finished ${Math.min(save.unlocked, HORDE_UNLOCK_MISSION)}.</p>
+        <button class="btn primary" disabled>Locked</button>`;
+    } else html += `<button class="btn primary" id="hStart">Start siege</button>`;
+    det.innerHTML = html;
+    for (const sv of det.querySelectorAll('.st svg')) { sv.style.width = '18px'; sv.style.height = '18px'; }
+    $('hStart')?.addEventListener('click', () => {
+      this.audio.ui();
+      this.g.startHorde(this.hSel === 'endless' ? 'endless' : this.hSel, this.hMap);
+      this.show(null);
+    });
+  }
+
+  renderLab() {
+    const H = save.horde;
+    const btn = (attr, cost, label) => cost === null ? '<span class="kv"><b>MAX</b></span>'
+      : `<button class="btn ${H.dna >= cost ? 'primary' : ''}" ${attr} ${H.dna >= cost ? '' : 'disabled'}>${label ? label + ' · ' : ''}${cost} DNA</button>`;
+    const pips = (n, max) => `<div class="pips">${Array.from({ length: max }, (_, i) => `<i class="${i < n ? 'f' : ''}"></i>`).join('')}</div>`;
+    let left = `<div class="sectionT" style="margin-top:0">ZOMBIES</div><p class="kv" style="margin:0 0 4px">Each mutation adds ${Math.round(MUTATION.hp * 100)}% health, ${Math.round(MUTATION.speed * 100)}% speed and ${Math.round(MUTATION.wall * 100)}% wall damage.</p>`;
+    for (const U of HORDE_UNITS) {
+      const owned = !!H.units[U.key], lvl = H.mut[U.key] || 0;
+      left += `<div class="up"><div class="li">${zicon(U.key)}<div><div class="nm">${UNIT_NAME(U.key)} <span class="kv">· ${U.cost} brains</span></div><div class="ds">${U.desc}</div>${owned ? pips(lvl, MUTATION.max) : ''}</div></div>
+        ${owned ? btn(`data-mut="${U.key}"`, mutationCost(U.key, lvl), 'Mutate') : btn(`data-unit="${U.key}"`, U.unlock, 'Unlock')}</div>`;
+    }
+    let right = '<div class="sectionT" style="margin-top:0">ABILITIES</div>';
+    for (const A of HORDE_ABILITIES) {
+      const lvl = H.abil[A.key] || 0, st = abilityStats(A.key);
+      const info = st ? (A.key === 'burrow' ? `${st.n} zombies, every ${st.cd}s` : `Lasts ${st.dur}s, every ${st.cd}s`) : '';
+      const next = lvl === 0 ? A.unlock : lvl - 1 < A.max ? A.cost[lvl - 1] : null;
+      right += `<div class="up"><div><div class="nm">${A.name}${info ? ` <span class="kv">· ${info}</span>` : ''}</div><div class="ds">${A.desc}</div>${lvl ? pips(lvl - 1, A.max) : ''}</div>
+        ${btn(`data-abil="${A.key}"`, next, lvl ? 'Upgrade' : 'Unlock')}</div>`;
+    }
+    const inc = H.income || 0;
+    right += `<div class="sectionT">HIVE</div><div class="up"><div><div class="nm">${HIVE.name} <span class="kv">· ${brainIncome().toFixed(1).replace('.0', '')} brains/s</span></div><div class="ds">${HIVE.desc}</div>${pips(inc, HIVE.max)}</div>
+      ${btn('data-hive="1"', inc < HIVE.max ? HIVE.cost[inc] : null, 'Upgrade')}</div>`;
+    $('labUnits').innerHTML = left;
+    $('labAbil').innerHTML = right;
+    const pay = cost => { if (cost === null || H.dna < cost) return false; H.dna -= cost; persist(); this.audio.buy(); return true; };
+    for (const b of document.querySelectorAll('#hLab [data-unit]')) b.addEventListener('click', () => { const U = unitDef(b.dataset.unit); if (pay(U.unlock)) { H.units[U.key] = true; this.renderHorde(); } });
+    for (const b of document.querySelectorAll('#hLab [data-mut]')) b.addEventListener('click', () => { const k = b.dataset.mut, L = H.mut[k] || 0; if (pay(mutationCost(k, L))) { H.mut[k] = L + 1; this.renderHorde(); } });
+    for (const b of document.querySelectorAll('#hLab [data-abil]')) b.addEventListener('click', () => {
+      const A = HORDE_ABILITIES.find(a => a.key === b.dataset.abil), lvl = H.abil[A.key] || 0;
+      const cost = lvl === 0 ? A.unlock : lvl - 1 < A.max ? A.cost[lvl - 1] : null;
+      if (pay(cost)) { H.abil[A.key] = lvl + 1; this.renderHorde(); }
+    });
+    for (const b of document.querySelectorAll('#hLab [data-hive]')) b.addEventListener('click', () => { const L = H.income || 0; if (L < HIVE.max && pay(HIVE.cost[L])) { H.income = L + 1; this.renderHorde(); } });
+  }
+
+  frameHorde() {
+    const g = this.g, c = this.cache, H = save.horde;
+    const set = (id, v) => { if (c[id] !== v) { c[id] = v; $(id).textContent = v; } };
+    set('brainNum', String(Math.floor(g.brains)));
+    set('brainRate', `+${(Math.round(g.income * 10) / 10)}/s`);
+    const wf = Math.max(0, g.wallHp / g.wallMax);
+    set('hWallNum', String(Math.ceil(g.wallHp)));
+    if (c.hwf !== wf) {
+      if (c.hwf !== undefined && wf < c.hwf) { const b = $('hWallBar'); b.classList.add('hit'); clearTimeout(this.hitTO); this.hitTO = setTimeout(() => b.classList.remove('hit'), 120); }
+      c.hwf = wf; $('hWallFill').style.transform = `scaleX(${wf})`;
+    }
+    set('hTimer', fmtTime(g.hTime));
+    const low = g.hTime < 20;
+    if (c.low !== low) { c.low = low; $('hTimer').classList.toggle('low', low); }
+    const L = g.level;
+    set('hObj', (L.endless ? `ROUND ${g.round}` : `SIEGE ${L.i + 1} · ${L.name.toUpperCase()}`) + (g.burrowN > 0 ? ` · BURROW ×${g.burrowN}` : ''));
+    // cards
+    const ukey = HORDE_UNITS.filter(u => H.units[u.key]).map(u => u.key).join();
+    if (c.cards !== ukey) {
+      c.cards = ukey;
+      $('cards').innerHTML = HORDE_UNITS.filter(u => H.units[u.key]).map(u =>
+        `<button class="zc" data-unit="${u.key}" aria-label="${UNIT_NAME(u.key)}">${zicon(u.key)}<span class="nm">${UNIT_NAME(u.key)}</span><span class="cost">${BRAIN}${u.cost}</span><i class="cd"></i></button>`).join('');
+      c.cardState = {};
+    }
+    for (const b of $('cards').children) {
+      const U = unitDef(b.dataset.unit);
+      const cd = U.cd ? (g.cardCD[U.key] || 0) / U.cd : 0;
+      const st = (g.selCard === U.key ? 's' : '') + (g.brains < U.cost ? 'p' : '') + (U.once && g.bossUsed ? 'u' : '') + Math.round(cd * 20);
+      if (c.cardState[U.key] === st) continue;
+      c.cardState[U.key] = st;
+      b.classList.toggle('sel', g.selCard === U.key);
+      b.classList.toggle('poor', g.brains < U.cost);
+      b.classList.toggle('used', !!(U.once && g.bossUsed));
+      b.querySelector('.cd').style.height = Math.round(cd * 100) + '%';
+    }
+    // abilities
+    const akey = HORDE_ABILITIES.map(a => H.abil[a.key] || 0).join();
+    if (c.abils !== akey) {
+      c.abils = akey;
+      $('abils').innerHTML = HORDE_ABILITIES.map(a => `<button class="abil ${H.abil[a.key] ? '' : 'locked'}" data-ab="${a.key}" aria-label="${a.name}">${AICON[a.key]}<span>${a.name.toUpperCase()}</span><i class="cd"></i></button>`).join('');
+      c.abState = {};
+    }
+    for (const b of $('abils').children) {
+      const k = b.dataset.ab, A = abilityStats(k);
+      if (!A) continue;
+      const cd = (g.abilCD[k] || 0) / A.cd;
+      const act = k === 'fog' ? g.fogT > 0 : k === 'roar' ? g.roarT > 0 : g.burrowN > 0;
+      const st = Math.round(cd * 30) + (act ? 'a' : '');
+      if (c.abState[k] === st) continue;
+      c.abState[k] = st;
+      b.classList.toggle('active', act);
+      b.querySelector('.cd').style.height = Math.round(cd * 100) + '%';
+    }
+    // defenders
+    const dkey = g.round + ':' + g.defenders.length;
+    if (c.defs !== dkey) {
+      c.defs = dkey;
+      $('defs').innerHTML = g.defenders.map(() => '<div class="def"><i></i><span></span><b></b></div>').join('');
+    }
+    g.defenders.forEach((d, i) => {
+      const el = $('defs').children[i];
+      if (!el) return;
+      const label = d.gone ? 'FLED' : d.state === 'reloading' ? `RELOADING ${d.reloadT.toFixed(1)}` : d.state === 'aiming' ? 'AIMING' : 'WATCHING';
+      const cls = 'def ' + (d.gone ? 'gone' : d.state);
+      if (el.className !== cls) el.className = cls;
+      const nm = d.name.toUpperCase();
+      if (el.children[1].textContent !== nm) el.children[1].textContent = nm;
+      if (el.children[2].textContent !== label) el.children[2].textContent = label;
+    });
+  }
+
+  showHordeResult(r) {
+    const card = $('resultCard'), L = r.level, st = r.stats;
+    const endless = !!L.endless;
+    const title = endless ? 'SIEGE OVER' : r.win ? 'OUTPOST OVERRUN' : 'THE OUTPOST HELD';
+    const sub = endless ? `You broke ${r.rounds} outpost${r.rounds === 1 ? '' : 's'}${r.best ? '. New best!' : '.'}`
+      : r.win ? `Siege ${L.i + 1} · ${L.name} · ${fmtTime(r.timeLeft)} to spare` : 'Time ran out before the wall broke.';
+    const hasNext = !endless && r.win && L.i + 1 < HORDE_LEVELS.length;
+    card.innerHTML = `
+      <h2 class="${r.win || (endless && r.rounds > 0) ? 'win' : 'lose'}">${title}</h2>
+      <p class="sub">${sub}</p>
+      ${!endless && r.win ? `<div class="stars">${[1, 2, 3].map(i => STAR(r.stars >= i)).join('')}</div>` : ''}
+      <div class="tally"><div><b>${st.sent}</b><span>SENT</span></div><div><b>${st.lost}</b><span>LOST</span></div><div><b>${Math.round(st.dmg).toLocaleString('en-US')}</b><span>WALL DAMAGE</span></div><div><b>${st.dodged}</b><span>SNIPER MISSES</span></div></div>
+      <div class="payout">
+        <div class="row"><span>Wall damage</span><b>${r.dna} DNA</b></div>
+        ${endless ? `<div class="row"><span>Outposts broken</span><b>${r.bonus} DNA</b></div>` : `<div class="row"><span>Siege reward${r.win && !r.first ? ' (replay)' : ''}</span><b>${r.bonus} DNA</b></div>`}
+        <div class="row tot"><span>Total earned</span><b>${r.total} DNA</b></div>
+      </div>
+      <div class="actions">
+        ${hasNext ? '<button class="btn primary" id="hNext">Next siege</button>' : ''}
+        <button class="btn ${hasNext ? '' : 'primary'}" id="retryBtn">Retry</button>
+        <button class="btn" id="hLabBtn">Lab</button>
+        <button class="btn" data-go="menu">Menu</button>
+      </div>`;
+    card.querySelectorAll('.stars svg').forEach((sv, i) => { sv.style.animationDelay = (0.25 + i * 0.25) + 's'; });
+    $('hNext')?.addEventListener('click', () => {
+      this.audio.ui();
+      this.hSel = L.i + 1; this.hMap = HORDE_LEVELS[L.i + 1].map;
+      this.g.startHorde(L.i + 1); this.show(null);
+    });
+    $('retryBtn').addEventListener('click', () => { this.audio.ui(); this.restart(); });
+    $('hLabBtn').addEventListener('click', () => { this.audio.ui(); this.g.quitToMenu(); this.hordeTab = 'lab'; this.show('horde'); });
+    if (!endless) { this.hSel = hasNext ? L.i + 1 : L.i; this.hMap = HORDE_LEVELS[this.hSel].map; }
+    this.show('result');
   }
 
   updateWeaponBar() {

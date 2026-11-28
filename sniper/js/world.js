@@ -390,7 +390,7 @@ function buildFarm(ctx) {
   // farmhouse (left)
   house(gb, glow, -50, -64, 12, 9, 6, 0xe4dccb, 0x7a3428, Math.PI / 2 - 0.2, rng, { boarded: true });
   gb.boxB(-50, 6, -64, 1, 4, 1, 0x7a5a4a);
-  obstacles.push({ x: -50, z: -64, r: 8 });
+  obstacles.push({ x: -50, z: -64, r: 8, h: 8 });
   // barn (right)
   house(gb, glow, 46, -96, 14, 18, 8, 0xa8322b, 0x4d3a30, -Math.PI / 2 + 0.15, rng, { door: false });
   {
@@ -398,11 +398,11 @@ function buildFarm(ctx) {
     gb.boxB(46 + 9.05 * sin, 0, -96 + 9.05 * cos, 6.4, 5.2, 0.1, 0xf0e8dc, ry);
     gb.boxB(46 + 9.12 * sin, 0, -96 + 9.12 * cos, 5.6, 4.7, 0.1, 0x7a2420, ry);
   }
-  obstacles.push({ x: 46, z: -96, r: 11 });
+  obstacles.push({ x: 46, z: -96, r: 11, h: 10 });
   // silo
   gb.add('cyl12', 62, 8, -114, 3.2, 16, 3.2, 0xb8bcc0);
   gb.add('dome', 62, 16, -114, 3.3, 2.6, 3.3, 0x9aa0a6);
-  obstacles.push({ x: 62, z: -114, r: 4 });
+  obstacles.push({ x: 62, z: -114, r: 4, h: 16 });
   // windmill
   const wx = -78, wz = -138;
   gb.add('cone4', wx, 8, wz, 2.2, 16, 2.2, 0x8a8a8a, Math.PI / 4);
@@ -422,7 +422,7 @@ function buildFarm(ctx) {
   // hay bales in the field
   for (const [x, z] of [[-14, -38], [-11, -40], [16, -58], [22, -82], [-24, -88], [5, -104], [-30, -52]]) {
     gb.add('cyl8', x, 0.75, z, 0.75, 1.4, 0.75, 0xd8b85a, rng() * 3, 0, Math.PI / 2);
-    obstacles.push({ x, z, r: 1.2 });
+    obstacles.push({ x, z, r: 1.2, h: 1.5 });
   }
   // tractor
   {
@@ -433,7 +433,7 @@ function buildFarm(ctx) {
     gb.add('cyl12', x + 0.8, 0.9, z + 1.0, 0.9, 0.45, 0.9, 0x1c1c1c, 0.5, 0, Math.PI / 2);
     gb.add('cyl12', x - 0.4, 0.5, z - 1.0, 0.5, 0.35, 0.5, 0x1c1c1c, 0.5, 0, Math.PI / 2);
     gb.add('cyl12', x + 1.0, 0.5, z - 1.4, 0.5, 0.35, 0.5, 0x1c1c1c, 0.5, 0, Math.PI / 2);
-    obstacles.push({ x, z, r: 2.6 });
+    obstacles.push({ x, z, r: 2.6, h: 3 });
   }
   // fences
   fenceLine(gb, -62, -20, -62, -150);
@@ -464,7 +464,7 @@ function buildFarm(ctx) {
   }
   for (const [x, z] of [[-30, -110], [28, -120], [-36, -26], [34, -30], [-8, -128]]) {
     roundTree(gb, x, z, 1.1, rng);
-    obstacles.push({ x, z, r: 1.2 });
+    obstacles.push({ x, z, r: 1.2, h: 6 });
   }
   // rocks and grass
   for (let i = 0; i < 26; i++) rock(gb, (rng() - 0.5) * 130, -20 - rng() * 120, 0.4 + rng() * 0.9);
@@ -529,7 +529,7 @@ function buildTown(ctx) {
         gb.add('box', ax, 3.0, z - d / 2, 1.6, 0.12, d * 0.7, [0xa83a2a, 0x2a6a8a, 0x3a7a4a][Math.floor(rng() * 3)], 0, 0, side * 0.35);
         gb.boxB(side * (55 - 4.2), 3.6, z - d / 2, 0.2, 1.0, d * 0.6, 0x2a2a2a);
       }
-      obstacles.push({ x, z: z - d / 2, r: Math.max(d, w) / 2 + 0.5 });
+      obstacles.push({ x, z: z - d / 2, r: Math.max(d, w) / 2 + 0.5, h });
       z -= d + 1.5 + rng() * 3;
     }
   }
@@ -558,21 +558,21 @@ function buildTown(ctx) {
     gb.boxB(gx - 2, 0, gz, 0.8, 1.6, 0.6, 0xc8c0b0);
     gb.boxB(gx + 2, 0, gz, 0.8, 1.6, 0.6, 0xc8c0b0);
     glow.boxB(gx, 4.15, gz, 10, 0.05, 6, 0xfff4d0);
-    obstacles.push({ x: gx - 2, z: gz, r: 1 }, { x: gx + 2, z: gz, r: 1 });
+    obstacles.push({ x: gx - 2, z: gz, r: 1, h: 1.6 }, { x: gx + 2, z: gz, r: 1, h: 1.6 });
   }
   // wrecked cars and a crashed bus
   const carCols = [0x9a3a32, 0x3a5a8a, 0xd0d0c8, 0x6a7a3a, 0x8a8a8a, 0xc8a040];
   for (const [x, z, ry, flip] of [[-12, -34, 0.4, false], [14, -48, -0.9, false], [-22, -66, 1.8, true], [8, -86, 0.2, false],
     [26, -100, 2.4, false], [-6, -118, -0.6, false], [30, -32, 1.2, false], [-34, -44, 0.1, false]]) {
     car(gb, x, z, ry, carCols[Math.floor(rng() * carCols.length)], flip);
-    obstacles.push({ x, z, r: 2.6 });
+    obstacles.push({ x, z, r: 2.6, h: flip ? 2.1 : 1.8 });
   }
   {
     const bx = 18, bz = -70, ry = 0.7;
     gb.boxB(bx, 0.5, bz, 2.6, 2.6, 10, 0xd8a830, ry);
     gb.boxB(bx, 2.0, bz, 2.65, 0.8, 9.4, 0x2a3440, ry);
     gb.boxB(bx, 3.1, bz, 2.6, 0.1, 10, 0xc89a28, ry);
-    obstacles.push({ x: bx - 2.6, z: bz - 2.9, r: 2.2 }, { x: bx, z: bz, r: 2.2 }, { x: bx + 2.6, z: bz + 2.9, r: 2.2 });
+    obstacles.push({ x: bx - 2.6, z: bz - 2.9, r: 2.2, h: 3.1 }, { x: bx, z: bz, r: 2.2, h: 3.1 }, { x: bx + 2.6, z: bz + 2.9, r: 2.2, h: 3.1 });
   }
   // street lamps, cones, barrels, bins
   for (let z = -24; z > -140; z -= 18) { lamp(gb, glow, -47, z, 6, 1); lamp(gb, glow, 47, z, 6, -1); }
@@ -620,14 +620,14 @@ function buildYard(ctx) {
       const x = side * (50 + rng() * 4);
       for (let s = 0; s < stack; s++) container(x + (rng() - 0.5) * 0.4, s * 2.6, z, (rng() - 0.5) * 0.05, cc[Math.floor(rng() * cc.length)]);
       container(x + side * 3, 0, z, 0, cc[Math.floor(rng() * cc.length)]);
-      obstacles.push({ x, z: z - 4, r: 3 }, { x, z, r: 3 }, { x, z: z + 4, r: 3 });
+      obstacles.push({ x, z: z - 4, r: 3, h: 5 }, { x, z, r: 3, h: 5 }, { x, z: z + 4, r: 3, h: 5 });
     }
   }
   // single containers in the yard as cover
   for (const [x, z, ry] of [[-16, -44, 0.3], [20, -62, -0.5], [-8, -92, 1.4], [26, -108, 0.2], [-30, -76, 0.9]]) {
     container(x, 0, z, ry, cc[Math.floor(rng() * cc.length)]);
     const cos = Math.cos(ry), sin = Math.sin(ry);
-    for (const k of [-4.5, -1.5, 1.5, 4.5]) obstacles.push({ x: x + k * sin, z: z + k * cos, r: 1.9 });
+    for (const k of [-4.5, -1.5, 1.5, 4.5]) obstacles.push({ x: x + k * sin, z: z + k * cos, r: 1.9, h: 2.6 });
   }
   // gantry cranes
   const blinkers = [];
@@ -670,7 +670,7 @@ function buildYard(ctx) {
     gb.boxB(x, 0.3, z, 1.4, 1.2, 2.2, 0xe0a020, 0.4);
     gb.boxB(x, 1.5, z + 0.2, 1.3, 1.4, 1.2, 0x2a2e34, 0.4);
     gb.add('box', x - 0.5, 1.5, z - 1.5, 0.12, 3, 0.12, 0x3a3a3a, 0.4);
-    obstacles.push({ x, z, r: 1.8 });
+    obstacles.push({ x, z, r: 1.8, h: 2.5 });
   }
   // sea and ships on the horizon
   const sea = new THREE.Mesh(new THREE.PlaneGeometry(1400, 600), new THREE.MeshBasicMaterial({ color: 0x0b1424 }));
@@ -683,6 +683,61 @@ function buildYard(ctx) {
   }
   // quay edge
   gb.boxB(0, 0, -200, 900, 0.8, 4, 0x5a5e64);
+}
+
+// ---------- outpost camp behind the wall (seen from the zombie side in Horde mode) ----------
+function buildCamp(ctx) {
+  const { gb, deco, glow, rng, M } = ctx;
+  const canvas = M.id === 'yard' ? 0x4a5560 : M.id === 'town' ? 0x6a6250 : 0x5a6a42;
+  const tent = (x, z, ry, w = 4, d = 5) => {
+    gb.add('prism', x, 0.9, z, w * 0.6, 1.8, d, canvas, ry);
+    gb.boxB(x, 0, z, w * 0.5, 0.9, d * 0.98, new THREE.Color(canvas).multiplyScalar(0.85).getHex(), ry);
+  };
+  tent(-13, 10, 0.1); tent(-6, 20, -0.15, 4.5, 6); tent(11, 14, 0.2); tent(19, 26, -0.1, 5, 7); tent(-20, 28, 0.3);
+  for (const [x, z, n] of [[5, 6, 3], [-9, 4, 2], [14, 5, 2], [-3, 32, 3]]) {
+    for (let i = 0; i < n; i++) crate(gb, x + (i % 2) * 1.1, z + Math.floor(i / 2) * 1.1, 1, 0x7a6440, rng());
+  }
+  for (const [x, z] of [[8, 9], [8.7, 9.4], [-16, 5], [-15.3, 5.5], [24, 12]]) barrel(gb, x, z, 0x4a5a3a);
+  // supply truck
+  const tx = -24, tz = 18, ry = 0.5;
+  gb.boxB(tx, 0.6, tz, 2.6, 1.9, 6.2, 0x4e5a36, ry);
+  gb.add('prism', tx, 2.5, tz + 0.6 * Math.cos(ry), 1.4, 0.8, 4.4, 0x5a6a42, ry);
+  gb.boxB(tx - 3.6 * Math.sin(ry), 0.6, tz - 3.6 * Math.cos(ry), 2.4, 1.6, 1.8, 0x3e482a, ry);
+  for (const k of [-2.6, 0, 2.6]) for (const sd of [-1.2, 1.2]) {
+    gb.add('cyl8', tx + k * Math.sin(ry) + sd * Math.cos(ry), 0.55, tz + k * Math.cos(ry) - sd * Math.sin(ry), 0.55, 0.4, 0.55, 0x1b1b1b, ry, 0, Math.PI / 2);
+  }
+  // flagpole, generator, floodlight
+  gb.add('cyl6', 3, 6, 3, 0.08, 12, 0.08, 0x9a9a9a);
+  gb.boxB(3.9, 10.2, 3, 1.8, 1.1, 0.05, 0xb8402e);
+  gb.boxB(-4, 0, 7, 1.6, 1.1, 1, 0x7a7a2a);
+  gb.add('cyl6', 15, 4, -6, 0.12, 8, 0.12, 0x5a5e64);
+  glow.boxB(15, 7.7, -6.4, 1.2, 0.5, 0.3, 0xfff2cc);
+  // sandbag ring round the tower legs and a fence round the camp
+  for (let a = 0; a < Math.PI * 2; a += 0.35) gb.add('box', Math.cos(a) * 4, 0.3, 1 + Math.sin(a) * 4, 1.1, 0.6, 0.55, 0xa8996e, -a, 0, 0, 0.08);
+  fenceLine(gb, -34, 40, 34, 40, 0x7a6a52, 1.6);
+  fenceLine(gb, -34, 40, -30, -12, 0x7a6a52, 1.6);
+  fenceLine(gb, 34, 40, 30, -12, 0x7a6a52, 1.6);
+  // track leading away behind the camp
+  for (let z = 4; z < 260; z += 8) deco.add('plane', Math.sin(z * 0.015) * 5, 0.02, z + 4, 5.5, 1, 8.6, M.id === 'yard' ? 0x3b4048 : 0x8b6d48, 0, 0, 0, 0.05);
+  // map-specific background
+  if (M.id === 'town') {
+    for (let i = 0; i < 16; i++) {
+      const x = (i - 7.5) * 16 + (rng() - 0.5) * 4, z = 70 + rng() * 60;
+      house(gb, glow, x, z, 10 + rng() * 5, 9, 5 + Math.floor(rng() * 3) * 3, [0xc9b79c, 0x9fb1a8, 0xb48a78][i % 3], 0x4a4040, Math.PI, rng, { flat: rng() < 0.5, lit: true });
+    }
+  } else if (M.id === 'yard') {
+    const cc = [0x8a3b2a, 0x2f5a8a, 0x3e6b45, 0xc4692b, 0x7a7f86];
+    for (let i = 0; i < 18; i++) {
+      const x = (i - 9) * 9 + (rng() - 0.5) * 3, z = 55 + rng() * 50, st = 1 + Math.floor(rng() * 3);
+      for (let k = 0; k < st; k++) gb.add('box', x, 1.3 + k * 2.6, z, 2.45, 2.6, 12.2, cc[Math.floor(rng() * cc.length)], rng() * 0.1, 0, 0, 0.04);
+    }
+  } else {
+    for (let i = 0; i < 120; i++) {
+      const x = (rng() - 0.5) * 260, z = 50 + rng() * 140;
+      if (Math.abs(x - Math.sin(z * 0.015) * 5) < 6) continue;
+      if (rng() < 0.6) pine(gb, x, z, 0.9 + rng() * 0.8, rng); else roundTree(gb, x, z, 0.9 + rng() * 0.6, rng);
+    }
+  }
 }
 
 // ---------- entry ----------
@@ -719,6 +774,7 @@ export function buildWorld(M) {
   if (M.id === 'farm') buildFarm(ctx);
   else if (M.id === 'town') buildTown(ctx);
   else buildYard(ctx);
+  buildCamp(ctx);
 
   const staticMesh = gb.build(new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true }));
   staticMesh.userData.surface = M.id === 'yard' ? 'metal' : 'wood';

@@ -29,7 +29,7 @@ export class FX {
   constructor(scene) {
     this.scene = scene;
     this.bits = new Pool(scene, BOX, new THREE.MeshBasicMaterial({ color: 0xffffff }), 500);
-    this.puffs = new Pool(scene, new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }), 120);
+    this.puffs = new Pool(scene, new THREE.IcosahedronGeometry(1, 0), new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.55, depthWrite: false }), 260);
     const decalGeo = new THREE.CircleGeometry(1, 9); decalGeo.rotateX(-Math.PI / 2);
     this.decals = new THREE.InstancedMesh(decalGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6 }), 80);
     this.decals.count = 0; this.decals.frustumCulled = false; this.decals.renderOrder = 3;
@@ -53,10 +53,15 @@ export class FX {
       this.rings.push({ mesh: m, t: 0, life: 0 });
     }
     this.ringIdx = 0;
-    this.tracer = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
-    this.tracer.visible = false;
-    scene.add(this.tracer);
-    this.tracerT = 0;
+    // several tracers can be in flight at once (defenders fire too)
+    this.tracers = [];
+    for (let i = 0; i < 8; i++) {
+      const m = new THREE.Mesh(BOX, new THREE.MeshBasicMaterial({ color: 0xffe9a0, transparent: true, opacity: 0, blending: THREE.AdditiveBlending, depthWrite: false }));
+      m.visible = false;
+      scene.add(m);
+      this.tracers.push({ mesh: m, t: 0, op: 0.7 });
+    }
+    this.tracerIdx = 0;
     this.lights = [];
   }
 
@@ -68,7 +73,7 @@ export class FX {
     this.debris.length = 0;
     for (const f of this.fireballs) { f.mesh.visible = false; f.life = 0; }
     for (const r of this.rings) { r.mesh.visible = false; r.life = 0; }
-    this.tracer.visible = false;
+    for (const t of this.tracers) t.mesh.visible = false;
   }
 
   _bit(p, v, color, size, life, opts = {}) {
@@ -175,17 +180,18 @@ export class FX {
     r.t = 0; r.life = 0.5; r.size = size; r.mesh.visible = true;
   }
 
-  shootTracer(from, to, opacity = 0.7) {
+  shootTracer(from, to, opacity = 0.7, width = 0.03, reuseFirst = false) {
     const len = from.distanceTo(to);
     if (len < 2) return;
-    const mid = from.clone().add(to).multiplyScalar(0.5);
-    this.tracer.position.copy(mid);
-    this.tracer.lookAt(to);
-    this.tracer.scale.set(0.03, 0.03, len);
-    this.tracer.material.opacity = opacity;
-    this.tracerOp = opacity;
-    this.tracer.visible = true;
-    this.tracerT = 0.09;
+    const tr = reuseFirst ? this.tracers[0] : this.tracers[1 + (this.tracerIdx++ % (this.tracers.length - 1))];
+    const m = tr.mesh;
+    m.position.copy(from).add(to).multiplyScalar(0.5);
+    m.lookAt(to);
+    m.scale.set(width, width, len);
+    m.material.opacity = opacity;
+    tr.op = opacity;
+    m.visible = true;
+    tr.t = 0.09;
   }
 
   update(dt, realDt) {
@@ -282,11 +288,12 @@ export class FX {
       r.mesh.scale.setScalar(r.size * (1 + k * 2.5));
       r.mesh.material.opacity = 0.16 * (1 - k);
     }
-    // tracer
-    if (this.tracer.visible) {
-      this.tracerT -= realDt;
-      this.tracer.material.opacity = Math.max(0, this.tracerT / 0.09) * this.tracerOp;
-      if (this.tracerT <= 0) this.tracer.visible = false;
+    // tracers
+    for (const tr of this.tracers) {
+      if (!tr.mesh.visible) continue;
+      tr.t -= realDt;
+      tr.mesh.material.opacity = Math.max(0, tr.t / 0.09) * tr.op;
+      if (tr.t <= 0) tr.mesh.visible = false;
     }
   }
 }

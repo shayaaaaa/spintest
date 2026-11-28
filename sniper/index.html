@@ -83,9 +83,9 @@ body.focus #vFocus { opacity: 1; }
 .item .cnt { position: absolute; right: -5px; bottom: -5px; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--brass); color: #1a1406; font-size: 13px; font-weight: 800; display: grid; place-items: center; }
 .item.empty { opacity: .35; }
 .item.active { box-shadow: 0 0 0 3px rgba(80, 150, 240, .7); }
-#feed { display: grid; gap: 3px; justify-items: center; }
-#feed div { font-size: 13px; font-weight: 800; letter-spacing: .06em; background: rgba(0, 0, 0, .5); padding: 2px 8px; border-radius: 3px; animation: feed 2.6s forwards; white-space: nowrap; }
-#feed .head { color: #ff8a5a; } #feed .gold { color: var(--brass); } #feed .good { color: var(--medic); } #feed .bad { color: #ff6a5a; } #feed .dim { color: var(--muted); }
+.feed { display: grid; gap: 3px; justify-items: center; }
+.feed div { font-size: 13px; font-weight: 800; letter-spacing: .06em; background: rgba(0, 0, 0, .5); padding: 2px 8px; border-radius: 3px; animation: feed 2.6s forwards; white-space: nowrap; }
+.feed .head { color: #ff8a5a; } .feed .gold { color: var(--brass); } .feed .good { color: var(--medic); } .feed .bad { color: #ff6a5a; } .feed .dim { color: var(--muted); }
 @keyframes feed { 0% { opacity: 0; transform: translateX(20px); } 8% { opacity: 1; transform: none; } 80% { opacity: 1; } 100% { opacity: 0; } }
 #cross { position: absolute; left: 50%; top: 50%; width: 0; height: 0; --g: 6px; filter: drop-shadow(0 0 1.5px #000); }
 #cross i { position: absolute; background: rgba(255, 255, 255, .92); }
@@ -125,11 +125,11 @@ body.rsight #sight svg { display: block; }
 #hit::before { transform: rotate(45deg); } #hit::after { transform: rotate(-45deg); }
 #hit.on { animation: hit .3s; } #hit.kill::before, #hit.kill::after { background: linear-gradient(#ff4a3a 0 30%, transparent 30% 70%, #ff4a3a 70%); }
 @keyframes hit { 0% { opacity: 1; transform: scale(1.4); } 100% { opacity: 0; transform: scale(1); } }
-#big { position: absolute; left: 0; right: 0; top: 31%; text-align: center; font-family: var(--display); font-size: clamp(30px, 7vw, 54px); letter-spacing: .04em; opacity: 0; text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
+#big { position: absolute; pointer-events: none; left: 0; right: 0; top: 31%; text-align: center; font-family: var(--display); font-size: clamp(30px, 7vw, 54px); letter-spacing: .04em; opacity: 0; text-shadow: 0 3px 0 rgba(0, 0, 0, .6); }
 #big.on { animation: big 1s forwards; }
 #big.head { color: #ff5f3a; } #big.gold { color: var(--brass); } #big.bad { color: #ff4a3a; }
 @keyframes big { 0% { opacity: 0; transform: scale(1.8); } 12% { opacity: 1; transform: scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateY(-14px); } }
-#banner { position: absolute; left: 0; right: 0; top: 36%; text-align: center; opacity: 0; }
+#banner { position: absolute; pointer-events: none; left: 0; right: 0; top: 36%; text-align: center; opacity: 0; }
 #banner.on { animation: banner 2.8s forwards; }
 #banner h2 { margin: 0; font-family: var(--display); font-weight: 400; font-size: clamp(30px, 6.5vw, 52px); color: var(--bone); text-shadow: 0 3px 0 rgba(0, 0, 0, .6); letter-spacing: .03em; }
 #banner p { margin: 4px 0 0; font-size: 17px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--brass); text-shadow: 0 1px 2px #000; }
@@ -167,6 +167,53 @@ body.rsight #sight svg { display: block; }
 #kcBars span { position: absolute; left: calc(16px + var(--sal)); bottom: 3%; z-index: 1; font-size: 14px; letter-spacing: .3em; color: var(--brass); font-weight: 800; }
 body.killcam #hud > *:not(#kcBars):not(#big):not(#banner) { visibility: hidden; }
 body.scoped #cross { display: none; }
+
+/* ---------- horde HUD ---------- */
+#hhud { position: absolute; inset: 0; pointer-events: none; }
+#hhud button { pointer-events: auto; touch-action: none; }
+#brains { display: flex; align-items: center; gap: 6px; background: rgba(10, 12, 9, .62); border: 1px solid var(--line); border-radius: 8px; padding: 3px 10px 3px 6px; }
+#brains svg { width: 30px; height: 30px; }
+#brains b { font-size: 26px; font-weight: 800; font-variant-numeric: tabular-nums; color: #f8c6d2; line-height: 1; }
+#brains small { color: var(--muted); font-size: 13px; }
+.feed.left { justify-items: start; }
+.hobj { font-size: 13px; font-weight: 800; letter-spacing: .06em; text-shadow: 0 1px 2px #000; }
+#hTimer { text-align: center; font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; text-shadow: 0 1px 3px #000; line-height: 1; }
+#hTimer.low { color: #ff6a5a; }
+#hWallBar .fill { background: linear-gradient(#b8863a, #7a5216); }
+#hWallBar.hit .fill { background: linear-gradient(#ffd27a, #c88a2a); }
+#defs { position: absolute; right: calc(10px + var(--sar)); top: calc(60px + var(--sat)); display: grid; gap: 4px; justify-items: end; }
+.def { display: flex; align-items: center; gap: 7px; padding: 3px 8px; border-radius: 6px; background: rgba(10, 12, 9, .66); border: 1px solid rgba(255, 90, 70, .45); font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+.def i { width: 8px; height: 8px; border-radius: 50%; background: #ff4a3a; flex: none; }
+.def b { min-width: 92px; text-align: right; font-variant-numeric: tabular-nums; color: #ffb0a0; }
+.def.reloading { border-color: rgba(123, 214, 106, .75); } .def.reloading b { color: var(--medic); } .def.reloading i { background: var(--medic); }
+.def.idle b { color: var(--muted); }
+.def.gone { opacity: .35; }
+#hzoom { position: absolute; left: calc(12px + var(--sal)); bottom: calc(14px + var(--sab)); display: flex; gap: 8px; }
+#hzoom .round { font-size: 24px; font-weight: 800; }
+#cards { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(10px + var(--sab)); display: flex; gap: 5px; }
+.zc { position: relative; width: 54px; height: 72px; border-radius: 10px; background: rgba(20, 24, 16, .8); border: 1.5px solid rgba(255, 255, 255, .22); display: grid; justify-items: center; align-content: start; padding-top: 2px; overflow: hidden; color: var(--bone); }
+.zc svg.z { width: 38px; height: 38px; }
+.zc .nm { font-size: 10.5px; font-weight: 800; letter-spacing: .03em; line-height: 1.1; }
+.zc .cost { display: flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 800; color: #f8c6d2; font-variant-numeric: tabular-nums; }
+.zc .cost svg { width: 12px; height: 12px; }
+.zc .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0, 0, 0, .55); pointer-events: none; }
+.zc.sel { border-color: #9cf08a; box-shadow: 0 0 0 2px rgba(156, 240, 138, .55), inset 0 0 12px rgba(156, 240, 138, .22); }
+.zc.poor .cost { color: #ff7a6a; }
+.zc.poor svg.z { opacity: .45; }
+.zc.used { opacity: .3; }
+#abils { position: absolute; right: calc(12px + var(--sar)); bottom: calc(10px + var(--sab)); display: flex; gap: 6px; }
+.abil { position: relative; width: 56px; height: 64px; border-radius: 10px; background: rgba(10, 12, 9, .7); border: 1.5px solid rgba(156, 240, 138, .55); color: #d8f5cf; display: grid; place-items: center; align-content: center; gap: 2px; overflow: hidden; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
+.abil svg { width: 26px; height: 26px; }
+.abil .cd { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: rgba(0, 0, 0, .62); pointer-events: none; }
+.abil.active { box-shadow: 0 0 0 3px rgba(156, 240, 138, .75); }
+.abil.locked { display: none; }
+#ghost { position: absolute; width: 46px; height: 46px; margin: -23px 0 0 -23px; pointer-events: none; opacity: .9; filter: drop-shadow(0 2px 4px #000); }
+#ghost svg { width: 46px; height: 46px; }
+.money.dna { color: #9cf08a; }
+.lockTag { margin-left: auto; font-size: 11px; letter-spacing: .12em; color: var(--muted); }
+.up .li { display: flex; gap: 10px; align-items: center; }
+.up .li svg.z { width: 38px; height: 38px; flex: none; }
+.lv .nn { font-size: 12px; font-weight: 800; letter-spacing: .06em; color: var(--muted); }
 
 /* ---------- menus ---------- */
 .screen { position: absolute; inset: 0; display: flex; flex-direction: column; padding: calc(10px + var(--sat)) max(16px, calc(var(--sar) + 12px)) calc(10px + var(--sab)) max(16px, calc(var(--sal) + 12px)); }
@@ -308,7 +355,20 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
   .lv .n { font-size: 20px; }
   .btn { min-height: 42px; }
 }
+@media (orientation: portrait) {
+  #abils, #hzoom { bottom: calc(92px + var(--sab)); }
+}
 @media (max-height: 360px) {
+  .card { padding: 10px 14px; gap: 6px; }
+  .card h2 { font-size: 26px; }
+  .stars svg { width: 26px; height: 26px; }
+  .tally b { font-size: 17px; }
+  .payout { font-size: 14px; }
+  .payout .tot { font-size: 16px; }
+  .zc { height: 66px; }
+  .zc svg.z { width: 34px; height: 34px; }
+  .abil { height: 58px; width: 52px; }
+  #brains b { font-size: 22px; }
   .lv { height: 54px; }
   .lv .st svg { width: 11px; height: 11px; }
   #menu .stack { gap: 7px; }
@@ -345,7 +405,7 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
     <div class="tc">
       <div class="bar wall" id="wallBar"><div class="fill" id="wallFill"></div><span><em style="font-style:normal">WALL</em><b id="wallNum">1000</b></span></div>
       <div class="bar boss" id="bossBar" hidden><div class="fill" id="bossFill"></div><span><em style="font-style:normal" id="bossName">BUTCHER</em><b id="bossNum"></b></span></div>
-      <div id="feed"></div>
+      <div id="feed" class="feed"></div>
     </div>
     <div class="tr"><div id="cash">$0</div>
       <button class="round" id="btnPause" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button>
@@ -361,8 +421,6 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
       <svg viewBox="0 0 152 104" fill="none" stroke="#ff8a3a" stroke-width="1.6"><path d="M66 58l10-8 10 8"/><path d="M76 50v-6"/><path d="M60 68h32M64 78h24M68 88h16"/><path d="M20 52h28M104 52h28"/></svg>
     </div>
     <div id="hit"></div>
-    <div id="big"></div>
-    <div id="banner"><h2></h2><p></p></div>
     <div id="zoomBox" hidden><small>ZOOM</small><div id="zoomTrack"><div id="zoomKnob"></div></div><div id="zoomLbl">4.0×</div></div>
     <div class="br">
       <div id="ammo"><div id="reloadHint"></div><div id="ammoNum">5<small>/5</small></div><div id="rounds"></div></div>
@@ -372,6 +430,23 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
     </div>
     <div id="kcBars" hidden><span>KILL CAM</span></div>
   </div>
+
+  <!-- Horde mode HUD: you command the infected -->
+  <div id="hhud" hidden>
+    <div class="tl"><div id="brains"><svg class="brain" viewBox="0 0 24 24"><path d="M10.5 4.5a3 3 0 0 0-4.6 1.6A3.2 3.2 0 0 0 3.5 10a3.3 3.3 0 0 0 .6 4.5 3.2 3.2 0 0 0 3 4 3 3 0 0 0 3.4 1.2V4.5zm3 0a3 3 0 0 1 4.6 1.6A3.2 3.2 0 0 1 20.5 10a3.3 3.3 0 0 1-.6 4.5 3.2 3.2 0 0 1-3 4 3 3 0 0 1-3.4 1.2V4.5z" fill="#f29bb0" stroke="#8a3a52" stroke-width="1.2"/><path d="M7 9.5c1 .4 1.5 1.2 1.5 2.2M17 9.5c-1 .4-1.5 1.2-1.5 2.2M7.5 15c.9-.2 1.7.1 2.2.8M16.5 15c-.9-.2-1.7.1-2.2.8" stroke="#8a3a52" stroke-width="1.1" fill="none"/></svg><b id="brainNum">60</b><small id="brainRate">+5/s</small></div><div id="hObj" class="hobj"></div><div id="hfeed" class="feed left"></div></div>
+    <div class="tc">
+      <div class="bar wall" id="hWallBar"><div class="fill" id="hWallFill"></div><span><em style="font-style:normal">THEIR WALL</em><b id="hWallNum"></b></span></div>
+      <div id="hTimer">2:30</div>
+    </div>
+    <div class="tr"><button class="round" id="hPause" aria-label="Pause"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg></button></div>
+    <div id="defs"></div>
+    <div id="hzoom"><button class="round" data-z="0.8" aria-label="Zoom in">+</button><button class="round" data-z="1.25" aria-label="Zoom out">&minus;</button></div>
+    <div id="cards"></div>
+    <div id="abils"></div>
+    <div id="ghost" hidden></div>
+  </div>
+  <div id="big"></div>
+  <div id="banner"><h2></h2><p></p></div>
 
   <!-- main menu -->
   <section class="screen shade" id="menu" hidden>
@@ -384,6 +459,7 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
     <div class="stack">
       <button class="btn primary" data-go="campaign"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4l12 8-12 8z"/></svg>Campaign</button>
       <button class="btn" data-go="survival"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 4v5c0 5-3.5 8-8 9-4.5-1-8-4-8-9V7z"/></svg>Survival</button>
+      <button class="btn" data-go="horde"><svg class="brain" style="width:20px;height:20px" viewBox="0 0 24 24"><path d="M10.5 4.5a3 3 0 0 0-4.6 1.6A3.2 3.2 0 0 0 3.5 10a3.3 3.3 0 0 0 .6 4.5 3.2 3.2 0 0 0 3 4 3 3 0 0 0 3.4 1.2V4.5zm3 0a3 3 0 0 1 4.6 1.6A3.2 3.2 0 0 1 20.5 10a3.3 3.3 0 0 1-.6 4.5 3.2 3.2 0 0 1-3 4 3 3 0 0 1-3.4 1.2V4.5z" fill="#f29bb0" stroke="#8a3a52" stroke-width="1.2"/><path d="M7 9.5c1 .4 1.5 1.2 1.5 2.2M17 9.5c-1 .4-1.5 1.2-1.5 2.2M7.5 15c.9-.2 1.7.1 2.2.8M16.5 15c-.9-.2-1.7.1-2.2.8" stroke="#8a3a52" stroke-width="1.1" fill="none"/></svg>Horde<small id="hordeLock" class="lockTag"></small></button>
       <button class="btn" data-go="armory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 2v6M12 16v6M2 12h6M16 12h6"/></svg>Armory</button>
       <button class="btn" data-go="settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>Settings</button>
     </div>
@@ -443,6 +519,21 @@ input[type=range] { width: 180px; accent-color: var(--brass); touch-action: pan-
         <p><b>No sound?</b> Flip the ring/silent switch on the side of the iPhone; Safari mutes game audio in silent mode.</p>
         <p><b>Play offline on iPhone:</b> open this page in Safari, tap Share, then Add to Home Screen. Launch it once while online; after that it runs without a connection.</p>
       </div>
+    </div>
+  </section>
+
+  <!-- horde mode: sieges and the lab -->
+  <section class="screen dim" id="horde" hidden>
+    <div class="topbar"><button class="back" data-go="menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 5l-7 7 7 7"/></svg>BACK</button><h1>Horde</h1>
+      <div class="seg" id="hTabs"><button data-v="sieges" class="on">Sieges</button><button data-v="lab">Lab</button></div>
+      <div class="money dna" id="dnaPill">0 DNA</div></div>
+    <div class="cols" id="hSieges">
+      <div class="panel"><div class="tabs" id="hMapTabs"></div><div class="grid8" id="hGrid"></div></div>
+      <div class="panel detail" id="hDetail"></div>
+    </div>
+    <div class="cols" id="hLab" hidden>
+      <div class="panel" id="labUnits"></div>
+      <div class="panel" id="labAbil"></div>
     </div>
   </section>
 

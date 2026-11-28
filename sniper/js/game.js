@@ -5,6 +5,7 @@ import { save, persist, upgOf } from './save.js';
 import { buildWorld } from './world.js';
 import { buildHumanoid, zombieLook, survivorLook, buildWeapon, buildRocketProjectile, CYL, bas, disposeOwned } from './models.js';
 import { FX } from './fx.js';
+import { HordeMixin } from './horde.js';
 
 const UP = new THREE.Vector3(0, 1, 0);
 const V1 = new THREE.Vector3(), V2 = new THREE.Vector3();
@@ -120,7 +121,7 @@ class Zombie {
     const g = this.g, m = this.m, d = this.def, p = this.root.position;
     if (dt <= 0) return;
     if (this.state === 'rise') {
-      p.y += dt * 1.1 * this.scale;
+      p.y += dt * (this.riseRate || 1.1) * this.scale;
       m.shL.rotation.x = -2.7 + Math.sin(this.phase += dt * 5) * 0.2;
       m.shR.rotation.x = -2.6 - Math.sin(this.phase) * 0.2;
       if (Math.random() < 0.3) g.fx.puff(V1.set(p.x + rand(-0.4, 0.4), 0.1, p.z + rand(-0.4, 0.4)), 0x6a5a40, 0.4, 0.8, 1, 0.3);
@@ -147,7 +148,7 @@ class Zombie {
       } else this.state = 'walk';
       if (this.state === 'walk' && p.z >= this.target.z - 0.05) {
         this.state = 'attack';
-        if (d.explode && !this.ambient) { this.hp = 0; this.die(new THREE.Vector3(0, 0, -1), {}, 0); g.damageWall(100, this); }
+        if (d.explode && !this.ambient) { this.hp = 0; this.die(new THREE.Vector3(0, 0, -1), {}, 0); g.damageWall(100 * (this.dpsMult || 1), this); }
         return;
       }
       let dx = tx - p.x, dz = tz - p.z;
@@ -176,10 +177,10 @@ class Zombie {
       }
       const want = Math.atan2(dx, dz);
       this.heading = lerpAngle(this.heading, want, 1 - Math.exp(-dt * 4));
-      const spd = this.speed * (1 - this.react * 0.85);
+      const spd = this.speed * (1 - this.react * 0.85) * (this.horde && g.roarT > 0 ? 1.6 : 1);
       p.x += Math.sin(this.heading) * spd * dt;
       p.z += Math.cos(this.heading) * spd * dt;
-      if (p.z > WALL_Z - 0.6) p.z = WALL_Z - 0.6;
+      if (!this.breach && p.z > WALL_Z - 0.6) p.z = WALL_Z - 0.6;
       this.root.rotation.y = this.heading;
       this.animWalk(dt, spd);
     } else if (this.state === 'attack') {
@@ -188,7 +189,7 @@ class Zombie {
       this.attackT -= dt;
       if (this.attackT <= 0) {
         this.attackT = 1.0;
-        if (!this.ambient) g.damageWall(d.dps, this);
+        if (!this.ambient) g.damageWall(d.dps * (this.dpsMult || 1), this);
         else if (Math.random() < 0.3) g.fx.splinters(V1.set(p.x, 1.0, WALL_Z - 0.2), 3);
       }
     } else if (this.state === 'grab') {
@@ -466,7 +467,7 @@ class ViewModel {
     gun.rotation.set(this.kick * 0.16 * kf - this.reloadK * 0.5 - this.raiseK * 0.8, 0.04 * (1 - this.adsK), this.reloadK * 0.5 + this.boltK * 0.25);
     if (gun.userData.bolt) gun.userData.bolt.position.z = 0.1 + this.boltK * 0.08;
     if (gun.userData.warheads) gun.userData.warheads.forEach((w, i) => { w.visible = i < g.ammo; });
-    this.holder.visible = (g.state === 'playing' || g.state === 'over' || g.state === 'paused') && !g.scopeShown;
+    this.holder.visible = (g.state === 'playing' || g.state === 'over' || g.state === 'paused') && !g.scopeShown && g.mode !== 'horde';
   }
 }
 
@@ -646,6 +647,7 @@ export class Game {
   }
 
   begin(mapIndex) {
+    this.clearHorde();
     this.loadMap(mapIndex);
     this.clearActors();
     this.rebuildHittables();
@@ -708,6 +710,13 @@ export class Game {
     } while (tries < 14 && this.world.obstacles.some(ob => Math.hypot(ob.x - x, ob.z - z) < ob.r + 1.2));
     const rise = !o.ambient && type !== 'boss' && Math.random() < 0.3;
     const zb = new Zombie(this, type, x, z, { hpMult: (o.hpMult || 1) * (this.hpMult || 1), speedMult: this.speedMult || 1, rise, name: o.name, ambient: o.ambient });
+    this.zombies.push(zb);
+    this.rebuildHittables();
+    return zb;
+  }
+
+  createZombie(type, x, z, o = {}) {
+    const zb = new Zombie(this, type, x, z, o);
     this.zombies.push(zb);
     this.rebuildHittables();
     return zb;
@@ -796,6 +805,18 @@ export class Game {
   damageWall(amount, z) {
     if (this.state !== 'playing' && this.state !== 'killcam') return;
     if (this.wallHp <= 0) return;
+    if (this.mode === 'horde') {
+      // the player is attacking this wall; damage feeds the horde extra brains
+      if (this.ending) return;
+      const a = Math.min(amount, this.wallHp);
+      this.wallHp -= a;
+      this.hstats.dmg += a;
+      this.brains += a * 0.05;
+      this.world.barricade.setHealth(this.wallHp / this.wallMax);
+      this.fx.splinters(V1.set(z.pos.x, 0.9, WALL_Z - 0.1), z.def.boss ? 14 : 5);
+      if (Math.random() < 0.4 || z.def.boss) this.audio.wood(this.panOf(z.pos), z.def.boss ? 0.6 : 0.25);
+      return;
+    }
     this.wallHp = Math.max(0, this.wallHp - amount);
     this.world.barricade.setHealth(this.wallHp / this.wallMax);
     this.fx.splinters(V1.set(z.pos.x, 0.9, WALL_Z - 0.1), z.def.boss ? 14 : 5);
@@ -815,7 +836,9 @@ export class Game {
       const d = Math.hypot(z.pos.x - p.x, z.pos.z - p.z);
       if (d > radius) continue;
       const dir = V2.set(z.pos.x - p.x, 0.5, z.pos.z - p.z).normalize().clone();
-      const out = z.hit('body', o.rocket || o.mortar ? dmg : 0, null, dir, { dmg: dmg * (1 - d / radius * 0.6), headshot: false });
+      // in Horde mode the bloater's blast is softened for the player's own horde
+      const f = this.mode === 'horde' && o.fromBloater ? 0.6 : 1;
+      const out = z.hit('body', o.rocket || o.mortar ? dmg : 0, null, dir, { dmg: dmg * f * (1 - d / radius * 0.6), headshot: false });
       if (out.killed) { kills++; this.onKill(z, false, true); }
     }
     if (!o.mortar) for (const s of this.survivors) if (s.alive && s.state !== 'climb' && Math.hypot(s.pos.x - p.x, s.pos.z - p.z) < radius * 0.7) s.kill();
@@ -825,10 +848,17 @@ export class Game {
       const dx = Math.max(0, Math.abs(p.x) - WALL_HALF), dw = Math.hypot(dx, p.z - WALL_Z);
       if (dw < radius) {
         this.damageWall(dmg * 0.12 * (1 - dw / radius), { pos: p, def: {} });
-        if (this.time - (this.lastBlastWarn || 0) > 4) { this.lastBlastWarn = this.time; this.ui.feed('YOUR BLAST HIT THE WALL', 'bad'); }
+        if (this.time - (this.lastBlastWarn || 0) > 4) {
+          this.lastBlastWarn = this.time;
+          if (this.mode === 'horde') this.ui.feed('THEIR ROCKET HIT THEIR OWN WALL', 'good');
+          else this.ui.feed('YOUR BLAST HIT THE WALL', 'bad');
+        }
       }
     }
-    if (kills >= 2 && !o.silent) this.ui.feed(`CHAIN REACTION ×${kills}`, 'gold');
+    if (kills >= 2 && !o.silent) {
+      if (this.mode === 'horde') this.ui.feed(`${kills} OF YOURS CAUGHT IN THE BLAST`, 'bad');
+      else this.ui.feed(`CHAIN REACTION ×${kills}`, 'gold');
+    }
   }
 
   onZombieDown(z) {
@@ -837,6 +867,7 @@ export class Game {
   }
 
   onKill(z, headshot, explosive = false) {
+    if (this.mode === 'horde') { this.onUnitLost(z, headshot); return; }
     if (this.state !== 'playing' && this.state !== 'killcam') return;
     if (z.ambient) return;
     const d = z.def;
@@ -1015,6 +1046,11 @@ export class Game {
     const aim = hit ? hit.point.clone() : origin.clone().addScaledVector(dir, 420);
     const start = this.gun.muzzle.getWorldPosition(new THREE.Vector3());
     if (start.distanceTo(origin) > 2) start.copy(origin).addScaledVector(dir, 0.6);
+    this.spawnRocket(start, aim, r, !!hit);
+  }
+
+  // A rocket flies straight from start to aim and detonates there (or on anything it meets first).
+  spawnRocket(start, aim, r, hit = true) {
     const rdir = aim.clone().sub(start).normalize();
     // Rockets fly straight, so the scenery they will hit is known at launch.
     this.ray.set(start, rdir); this.ray.far = 420;
@@ -1161,7 +1197,7 @@ export class Game {
         .addScaledVector(k.dir, -0.85);
       cam.up.set(0, 1, 0);
       cam.lookAt(V2.copy(pos).addScaledVector(k.dir, 0.9).lerp(k.to, 0.8));
-      this.fx.shootTracer(k.from, V2.copy(pos).addScaledVector(k.dir, -0.3), 0.3);
+      this.fx.shootTracer(k.from, V2.copy(pos).addScaledVector(k.dir, -0.3), 0.3, 0.03, true);
       k.ringT -= dt;
       if (k.ringT <= 0) { k.ringT = 0.07; this.fx.ringAt(pos.clone().addScaledVector(k.dir, 0.15), k.dir, 0.05); }
       this.fx.update(0, dt);
@@ -1260,6 +1296,9 @@ export class Game {
     if (this.focusT > 0) { this.focusT = 0; this.audio.setFocus(false); this.ui.focus(false); }
     if (this.kc) this.endKillcam();
     this.state = 'menu';
+    this.clearHorde();
+    this.camLook = null;
+    this.ending = null;
     this.clearActors();
     this.rebuildHittables();
     this.world.barricade.setHealth(1);
@@ -1272,6 +1311,12 @@ export class Game {
     this.time += dt;
     if (this.state === 'paused') return;
     if (this.state === 'killcam') { this.updateKillcam(dt); return; }
+    if (this.mode === 'horde' && (this.state === 'playing' || this.state === 'over')) {
+      this.updateHorde(dt);
+      this.updateWorld(dt, dt);
+      if (this.state === 'playing') this.trackPerf(dt);
+      return;
+    }
     let ws = 1;
     if (this.state === 'playing' && this.focusT > 0) {
       ws = 0.35;
@@ -1390,5 +1435,7 @@ export class Game {
     this.renderer.render(this.scene, this.camera);
   }
 }
+
+Object.assign(Game.prototype, HordeMixin);
 
 export { RIFLES };

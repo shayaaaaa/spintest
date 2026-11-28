@@ -16,6 +16,8 @@ function defaults() {
     best: { farm: 0, town: 0, yard: 0 },
     stats: { kills: 0, heads: 0, shots: 0, hits: 0 },
     settings: { sens: 1.0, invertY: false, sound: true, quality: 'auto', killcam: true },
+    // Horde mode has its own progress and its own currency (DNA)
+    horde: { dna: 0, unlocked: 0, stars: [], best: 0, units: { walker: true, runner: true }, mut: {}, abil: { fog: 1 }, income: 0 },
   };
 }
 

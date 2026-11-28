@@ -215,3 +215,71 @@ export function survivalWave(n) {
     bonus: 100 + n * 40,
   };
 }
+
+// ---------------------------------------------------------------- Horde mode (you command the infected)
+// Brains are spent during a siege to send zombies. DNA is earned from sieges and spent in the Lab.
+export const HORDE_UNLOCK_MISSION = 8;   // campaign missions to finish before Horde opens (the farm map)
+
+export const HORDE_UNITS = [
+  { key: 'walker',  cost: 10,  cd: 0.4, unlock: 0,   factor: 1,   desc: 'Cheap and slow. Soaks up bullets.' },
+  { key: 'runner',  cost: 16,  cd: 0.8, unlock: 0,   factor: 1.1, desc: 'Fast and fragile. Send them while the sniper reloads.' },
+  { key: 'soldier', cost: 28,  cd: 1.2, unlock: 120, factor: 1.3, desc: 'Its helmet stops the first headshot.' },
+  { key: 'bloater', cost: 35,  cd: 2.0, unlock: 200, factor: 1.4, desc: 'Blows a hole in the wall. If it is shot early it explodes on your own horde.' },
+  { key: 'brute',   cost: 50,  cd: 2.5, unlock: 250, factor: 1.5, desc: 'Slow and very tough. Hits the wall hard.' },
+  { key: 'boss',    cost: 180, cd: 0,   unlock: 900, factor: 2,   once: true, desc: 'The Butcher. One per siege.' },
+];
+export const MUTATION = { max: 5, cost: [60, 110, 180, 280, 420], hp: 0.15, speed: 0.05, wall: 0.12 };
+export function mutationCost(unitKey, level) {
+  const u = HORDE_UNITS.find(x => x.key === unitKey);
+  if (!u || level >= MUTATION.max) return null;
+  return Math.round(MUTATION.cost[level] * u.factor / 10) * 10;
+}
+
+export const HORDE_ABILITIES = [
+  { key: 'fog',    name: 'Fog',    unlock: 0,   max: 3, cost: [150, 300, 500], cd: 26, cdPer: -2,
+    dur: 6, durPer: 1, desc: 'Smoke rolls over the field. Defenders aim slower and miss far more.' },
+  { key: 'roar',   name: 'Roar',   unlock: 180, max: 3, cost: [150, 300, 500], cd: 24, cdPer: -2,
+    dur: 5, durPer: 1, desc: 'Your whole horde runs 60% faster.' },
+  { key: 'burrow', name: 'Burrow', unlock: 350, max: 3, cost: [200, 380, 600], cd: 32, cdPer: -3,
+    n: 3, nPer: 1, desc: 'Your next zombies dig up right in front of the wall.' },
+];
+
+export const HIVE = { key: 'income', name: 'Brain hunger', max: 5, cost: [120, 220, 360, 540, 780], per: 0.1, base: 6, start: 80,
+  desc: 'You earn brains 10% faster per level.' };
+
+// Defender slots around the outpost: the tower top, a scaffold, and two nests behind the wall.
+export const DEFENDER_SLOTS = {
+  tower: { x: 0, y: 8.02, z: -0.9 },
+  scaffold: { x: 17, y: 5.02, z: -9 },
+  nestL: { x: -7, y: 1.22, z: -11.6 },
+  nestR: { x: 7, y: 1.22, z: -11.6 },
+};
+
+const HS = (w, acc) => ({ kind: 'sniper', w, acc, slot: 'tower' });
+const HS2 = (w, acc) => ({ kind: 'sniper', w, acc, slot: 'scaffold' });
+const HG = (w, acc) => ({ kind: 'gunner', w, acc, slot: 'nestL' });
+const HR = w => ({ kind: 'rocket', w, acc: 0.7, slot: 'nestR' });
+
+export const HORDE_LEVELS = [
+  { name: 'Lone Rifle',        map: 0, wall: 600,  time: 150, reward: 120, defenders: [HS('ranger', 0.62)] },
+  { name: 'Steady Hands',      map: 0, wall: 800,  time: 150, reward: 150, defenders: [HS('vulture', 0.7)] },
+  { name: 'Spray Line',        map: 0, wall: 900,  time: 170, reward: 180, defenders: [HS('ranger', 0.64), HG('viper', 0.26)] },
+  { name: 'Hollow Creek Falls', map: 0, wall: 1000, time: 180, reward: 220, defenders: [HS('vulture', 0.66), HG('viper', 0.28)] },
+  { name: 'Main Street',       map: 1, wall: 1200, time: 170, reward: 260, defenders: [HS('hornet', 0.68), HG('ironclad', 0.36)] },
+  { name: 'Rocket Man',        map: 1, wall: 1300, time: 180, reward: 300, defenders: [HS('vulture', 0.72), HR('thumper')] },
+  { name: 'Crossfire',         map: 1, wall: 1400, time: 190, reward: 340, defenders: [HS('vulture', 0.72), HG('ironclad', 0.33), HR('thumper')] },
+  { name: "The Mayor's Guard", map: 1, wall: 1700, time: 200, reward: 380, defenders: [HS('longbow', 0.74), HS2('hornet', 0.62), HG('viper', 0.32)] },
+  { name: 'Dock Patrol',       map: 2, wall: 1600, time: 190, reward: 420, defenders: [HS('longbow', 0.74), HG('grinder', 0.34), HR('thumper')] },
+  { name: 'Two Towers',        map: 2, wall: 1700, time: 200, reward: 460, defenders: [HS('thunder', 0.74), HS2('longbow', 0.62), HR('hydra')] },
+  { name: 'Iron Curtain',      map: 2, wall: 2000, time: 220, reward: 520, defenders: [HS('thunder', 0.78), HG('grinder', 0.38), HR('hydra')] },
+  { name: 'The Phantom',       map: 2, wall: 2300, time: 230, reward: 600, defenders: [HS('phantom', 0.82), HS2('thunder', 0.68), HG('grinder', 0.4), HR('hydra')] },
+].map((L, i) => ({ ...L, i }));
+
+// Endless siege: break one outpost after another; each rebuilt wall is stronger and better defended.
+export function hordeRound(n, map) {
+  const defenders = [HS(n < 3 ? 'ranger' : n < 6 ? 'vulture' : n < 9 ? 'longbow' : 'thunder', Math.min(0.88, 0.6 + n * 0.025))];
+  if (n >= 2) defenders.push(HG(n < 6 ? 'viper' : n < 10 ? 'ironclad' : 'grinder', Math.min(0.45, 0.24 + n * 0.02)));
+  if (n >= 4) defenders.push(HR(n < 8 ? 'thumper' : 'hydra'));
+  if (n >= 7) defenders.push(HS2(n < 11 ? 'hornet' : 'phantom', Math.min(0.75, 0.55 + n * 0.015)));
+  return { name: `Round ${n}`, map, wall: 700 + 220 * n, time: 150, reward: 0, defenders, endless: true, i: -1 };
+}
